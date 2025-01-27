@@ -9,3 +9,5 @@ classement class
 a la jeu geographique
 
 enseignant/ eleve outil ?
+
+est ce que le  llm peu gerer directement les 30 questions ?
