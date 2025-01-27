@@ -1,34 +1,52 @@
 # FILE: app.py
+import asyncio
 import streamlit as st
 from pages.ressources.components import Navbar
 from src.database import DatabaseManager
 from src.rag import RAGPipeline
 from src.ml_model import classify_answer
+from dotenv import find_dotenv, load_dotenv
 import os
-from dotenv import load_dotenv, find_dotenv
-import asyncio
+import random
 
 st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 
-# Load environment variables
-load_dotenv(find_dotenv())
-API_KEY = os.getenv("MISTRAL_API_KEY")
-
-# Initialize the DatabaseManager
-db_manager = DatabaseManager(db_path="./chromadb_data")
-
-# Initialize the RAGPipeline instance
-rag = RAGPipeline(
-    generation_model="ministral-8b-latest",
-    role_prompt="Tu es un assistant pédagogique pour le programme de collège français.",
-    db_path="./chromadb_data",
-    max_tokens=300,  # Augmenter le nombre de tokens si nécessaire pour l'explication
-    temperature=0.5,
-    top_n=2,
-)
-
-
 def main():
+    
+    # Charger les variables d'environnement
+    load_dotenv(find_dotenv())
+    API_KEY = os.getenv("MISTRAL_API_KEY")
+    
+    # Initialisation de la base de données et du pipeline RAG
+    db_manager = DatabaseManager(db_path="./chromadb_data")
+    rag = RAGPipeline(
+        generation_model="mistral-large-latest",
+        role_prompt="Tu es un assistant pédagogique pour le programme de lycée français.",
+        db_path="./chromadb_data",
+        max_tokens=300,
+        temperature=0.9,
+        top_n=1,
+    )
+
+    # Injecter du CSS pour que les boutons occupent toute la largeur
+    st.markdown(
+        """
+        <style>
+        /* Cible tous les boutons Streamlit pour qu'ils occupent 100% de la largeur de leur conteneur */
+        div.stButton > button {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+        }
+        /* Ajouter un peu de marge entre les lignes de boutons */
+        .button-row {
+            margin-bottom: 10px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+
     # Barre de navigation
     Navbar()
 
@@ -44,14 +62,15 @@ def main():
             st.session_state["correct_answers"] = 0
         if "total_questions" not in st.session_state:
             st.session_state["total_questions"] = 0
-        if "score" not in st.session_state:
-            st.session_state["score"] = 0.0
         if "hints_requested" not in st.session_state:
             st.session_state["hints_requested"] = 0
         if "current_question" not in st.session_state:
             st.session_state["current_question"] = None
         if "user_answer" not in st.session_state:
             st.session_state["user_answer"] = None
+
+
+        st.sidebar.markdown(f"## Score: {st.session_state['correct_answers']}")
 
         # Charger les sujets
         topics = db_manager.get_topics()
@@ -64,76 +83,78 @@ def main():
         # Sélection du sujet
         selected_topic = st.selectbox("Choisissez un sujet :", topics)
 
-        # Générer une question de quiz
-        if st.button("Générer une question"):
-            st.session_state["total_questions"] += 1
-            quiz_data = asyncio.run(rag.generate_quiz_question_async(selected_topic))
-           
+       
 
+                # Bouton pour générer une question
+        if st.button("Générer une question", key="generate_question_button"):
+            quiz_data = rag.generate_quiz_question(selected_topic)
             if quiz_data["correct_index"] == -1:
                 st.error(quiz_data["question"])
             else:
                 st.session_state["current_question"] = quiz_data
-                st.session_state["user_answer"] = None  # Réinitialiser la réponse de l'utilisateur
+                st.session_state["user_answer"] = None
+                st.session_state["total_questions"] += 1
+            st.rerun()  # Assurez la mise à jour immédiate de l'interface
 
         # Afficher la question actuelle et les options
         if st.session_state["current_question"]:
-            question = st.session_state["current_question"]["question"]
-            options = st.session_state["current_question"]["options"]
-            correct_index = st.session_state["current_question"]["correct_index"]
-            explanation = st.session_state["current_question"].get("explanation", "")
-            context = rag.fetch_context_by_topic_cached(selected_topic)  # Utiliser la version cachée
-
+            quiz_data = st.session_state["current_question"]
+            question = quiz_data["question"]
+            options = quiz_data["options"]
+            correct_index = quiz_data["correct_index"]
+            explanation = quiz_data.get("explanation", "")
             st.markdown(f"### Question:\n{question}")
 
-            with st.form(key='answer_form'):
-                selected_option = st.radio("Choisissez une réponse :", options, key='quiz_options')
-                indice_clicked = st.form_submit_button("💡 Indice")
-                validate_clicked = st.form_submit_button("Valider la réponse")
+            # Calculer le nombre de colonnes nécessaires (2 par défaut)
+            num_columns = 2
+            cols = st.columns(num_columns)  # Crée les colonnes
 
-            if indice_clicked:
-                hint = rag.generate_hint(question=question, context=context)
-                st.session_state["hints_requested"] += 1
-                st.session_state["score"] -= 0.5  # Déduction de 0.5 points
-                st.info(f"**Indice:** {hint}")
+            # Diviser les options en lignes de 2
+            for i in range(0, len(options), num_columns):
+                # Créer une ligne de colonnes
+                cols = st.columns(num_columns)
+                
+                for j in range(num_columns):
+                    option_index = i + j
+                    if option_index < len(options):
+                        option = options[option_index]
+                        col = cols[j]
+                        with col:
+                            if st.button(option, key=f"option_{option_index}"):
+                                # Valider immédiatement la réponse
+                                st.session_state["user_answer"] = option_index
+                               
 
-            if validate_clicked:
-                try:
-                    selected_index = options.index(selected_option)
-                except ValueError:
-                    st.error("Veuillez sélectionner une option valide.")
-                    selected_index = -1
-
-                st.session_state["user_answer"] = selected_index
-
-                if selected_index == correct_index:
+            if st.session_state["user_answer"] is not None:
+                # Vérifier la réponse de l'utilisateur
+                if st.session_state["user_answer"] == correct_index:
+                    st.success("Bonne réponse ! 🎉")
                     st.session_state["correct_answers"] += 1
-                    st.session_state["score"] += 1  # Ajouter 1 point pour une bonne réponse
-                    st.success("✅ Bonne réponse!")
                 else:
-                    st.error("❌ Mauvaise réponse.")
+                    st.error("Mauvaise réponse. 😔")
+                st.session_state["user_answer"] = None  # Réinitialiser la réponse de l'utilisateur
+                st.session_state["current_question"] = None  # Réinitialiser la question actuelle
+                st.session_state["hints_requested"] = 0  # Réinitialiser les indices demandés
+                correct_index = None  # Réinitialiser l'index correct
+                
+                # Afficher l'explication
+                st.markdown(f"**Explication :** {explanation}")
 
-                st.markdown(f"**La bonne réponse était:** {correct_index + 1}. {options[correct_index]}")
+           
+    
+            # Bouton pour passer à la prochaine question
+            if st.button("Prochaine question", key="next_question_button"):
+                quiz_data = rag.generate_quiz_question(selected_topic)
 
-                with st.expander("📖 Explication"):
-                    st.write(explanation)
-
-                # Statistiques de performance
-                st.sidebar.markdown(
-                    f"""
-                    ### 📊 Statistiques
-                    - Questions répondues : {st.session_state['total_questions']}
-                    - Réponses correctes : {st.session_state['correct_answers']}
-                    - Indices utilisés : {st.session_state['hints_requested']}
-                    - Score total : {st.session_state['score']}
-                    """
-                )
-
-                # Option pour passer à la prochaine question après validation
-                if st.button("Prochaine question", key="next_question_button"):
-                    st.session_state["current_question"] = None
-                    st.session_state["user_answer"] = None
-                    st.experimental_rerun()
+                if quiz_data["correct_index"] == -1:
+                    st.error(quiz_data["question"])
+                else:
+                    st.session_state["current_question"] = quiz_data
+                    st.session_state["user_answer"] = None  # Réinitialiser la réponse de l'utilisateur
+                    st.session_state["total_questions"] += 1  # Incrémenter ici
+                st.rerun()  # Forcer une mise à jour de l'interface utilisateur
+            if st.session_state :
+                st.write(st.session_state)
 
     # Section Chat
     with tabs[1]:
@@ -153,7 +174,7 @@ def main():
         # User input
         user_input = st.text_input("Vous :", key="chat_input")
 
-        if st.button("Envoyer") and user_input:
+        if st.button("Envoyer", key="send_button") and user_input:
             # Ajouter le message de l'utilisateur à l'historique
             st.session_state["chat_history"].append({"role": "user", "content": user_input})
 
@@ -161,13 +182,10 @@ def main():
             history = st.session_state["chat_history"]
 
             # Générer une réponse de l'IA
-            response = rag(query=user_input, history=history)
+            response = rag.query(user_input, history=history)
             ai_response = response if isinstance(response, str) else "Je n'ai pas compris votre demande."
 
             st.session_state["chat_history"].append({"role": "assistant", "content": ai_response})
-
-            # Rafraîchir la page pour afficher les nouveaux messages
-            st.rerun()
 
     # Vérification de la présence de la clé API Mistral
     if not API_KEY:
@@ -177,7 +195,6 @@ def main():
 
     if "current_question" not in st.session_state and not st.session_state.get("chat_history"):
         st.title("Bienvenue sur WikiLLM !")
-
 
 if __name__ == '__main__':
     main()

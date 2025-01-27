@@ -84,7 +84,7 @@ class DatabaseManager:
     def get_topics(self) -> List[str]:
         try:
             # Récupérer tous les documents en utilisant une requête vide
-            results = self.collection.query(query_texts=[""], n_results=1000)
+            results = self.collection.query(query_texts=[""], n_results=6)
             metadatas = results.get("metadatas", [[]])[0]
             titles = {metadata.get("title") for metadata in metadatas if "title" in metadata}
             return list(titles)
@@ -94,7 +94,7 @@ class DatabaseManager:
 
     def list_all_documents(self) -> None:
         try:
-            results = self.collection.query(query_texts=[""], n_results=1000)
+            results = self.collection.query(query_texts=[""], n_results=6)
             documents = results.get("documents", [[]])[0]
             metadatas = results.get("metadatas", [[]])[0]
             for doc, meta in zip(documents, metadatas):
