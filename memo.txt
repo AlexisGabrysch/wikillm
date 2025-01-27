@@ -2,5 +2,10 @@ BDD USERS score nom mdp ect
 BDD QUESTIONS/REPONSES question, resp1 resp2 resp3 resp4 answer explication hint topic
 
 relier les 2 pour voir quelles questions l'utilisateurs a réussis ou non [ADMIN]
+formulaire entree user/admin
+Dashboard admin voir les questions les plus diffcile aggregat hint demandé ect pour ML detection de questions ou hint pas bien et ainsi reformuler
 
+classement class
 a la jeu geographique
+
+enseignant/ eleve outil ?
