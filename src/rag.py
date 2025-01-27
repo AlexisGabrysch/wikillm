@@ -12,7 +12,8 @@ import streamlit as st
 import asyncio
 
 load_dotenv(find_dotenv())
-
+print("Chargement des variables d'environnement...")
+print(os.getenv("MISTRAL_API_KEY"))
 
 class RAGPipeline:
     """Retrieval-Augmented Generation Pipeline for enhanced Q&A."""
