@@ -16,7 +16,8 @@ class DatabaseManagerbis:
                 first_name TEXT NOT NULL,
                 last_name TEXT NOT NULL,
                 username TEXT UNIQUE NOT NULL,
-                password_hash TEXT NOT NULL
+                password_hash TEXT NOT NULL,
+                super_user BOOLEAN NOT NULL
             );
         """)
 
