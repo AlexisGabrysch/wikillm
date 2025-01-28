@@ -74,6 +74,16 @@ class DatabaseManagerbis:
             return False  # Username already exists
 
     def verify_user(self, username: str, password: str) -> bool:
+        """
+        Vérifie si le nom d'utilisateur et le mot de passe correspondent.
+        
+        Args:
+            username (str): Nom d'utilisateur.
+            password (str): Mot de passe.
+
+        Returns:
+            bool: True si le nom d'utilisateur et le mot de passe correspondent, False sinon.
+        """
         password_hash = self.hash_password(password)
         cursor = self.conn.execute("""
             SELECT * FROM users WHERE username = ? AND password_hash = ?;
@@ -166,3 +176,80 @@ class DatabaseManagerbis:
         rows = cursor.fetchall()
         topics = [row[0] for row in rows if row[0]]
         return topics
+
+    def change_password(self, username: str, old_password: str, new_password: str) -> bool:
+        """
+        Change le mot de passe d'un utilisateur.
+
+        Args:
+            username (str): Nom d'utilisateur.
+            old_password (str): Ancien mot de passe.
+            new_password (str): Nouveau mot de passe.
+
+        Returns:
+            bool: True si le mot de passe a été changé avec succès, False sinon.
+        """
+        if not self.verify_user(username, old_password):
+            return False
+
+        password_hash = self.hash_password(new_password)
+        self.conn.execute("""
+            UPDATE users SET password_hash = ? WHERE username = ?;
+        """, (password_hash, username))
+        self.conn.commit()
+        return True
+    
+    def change_username(self, username: str, new_username: str) -> bool:
+        """
+        Change the username of a user ensuring the new username is unique.
+
+        Args:
+            username (str): Current username.
+            new_username (str): New desired username.
+
+        Returns:
+            bool: True if the username was changed successfully, False otherwise.
+        """
+        # Check if the new username already exists
+        cursor = self.conn.execute("""
+            SELECT 1 FROM users WHERE username = ?;
+        """, (new_username,))
+        if cursor.fetchone():
+            return False  # New username already taken
+
+        # Update the username
+        self.conn.execute("""
+            UPDATE users SET username = ? WHERE username = ?;
+        """, (new_username, username))
+        self.conn.commit()
+        return True
+
+    def get_super_user(self, username: str) -> bool:
+        cursor = self.conn.execute("""
+            SELECT super_user FROM users WHERE username = ?;
+        """, (username,))
+        result = cursor.fetchone()
+        return bool(result[0]) if result else False
+    
+    def get_quiz_mode(self) -> str:
+        cursor = self.conn.execute("""
+            SELECT mode FROM quizzes;
+        """)
+        results = cursor.fetchall()
+        return [row[0] for row in results] if results else []
+    
+    def get_timestamp(self) -> str:
+        cursor = self.conn.execute("""
+            SELECT DISTINCT timestamp FROM quizzes;
+        """)
+        results = cursor.fetchall()
+        return [row[0] for row in results] if results else []
+    
+    def get_quizz_id(self) -> str:
+        cursor = self.conn.execute("""
+            SELECT COUNT(DISTINCT quizz_id) FROM quizzes;
+        """)
+        results = cursor.fetchall()
+        return [row[0] for row in results] if results else []
+    
+ 

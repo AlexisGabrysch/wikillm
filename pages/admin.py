@@ -55,6 +55,7 @@ def main():
         st.table(quiz_details)
         st.write("---")
     
+
     st.header("Answer Distribution by Question")
     
     # Récupérer toutes les questions
@@ -128,6 +129,35 @@ def main():
             st.rerun()
         except Exception as e:
             st.error(f"An error occurred while clearing the database: {e}")
+
+    st.header("Changer le mot de passe")
+    old_password = st.text_input("Ancien mot de passe", type="password")
+    new_password = st.text_input("Nouveau mot de passe", type="password")
+    confirm_password = st.text_input("Confirmer le nouveau de passe", type="password")
+    
+    if st.button("Changer le mot de passe"):
+        if new_password != confirm_password:
+            st.error("Les mots de passe ne correspondent pas.")
+        else:
+            username = st.session_state.get('username')
+            success = db.change_password(username, old_password, new_password)
+            if success:
+                st.success("Mot de passe changé avec succès !")
+            else:
+                st.error("Echec du changement de mot de passe. Assurez-vous que l'ancien mot de passe est le bon")
+    
+    st.header("Changer le nom d'utilisateur")
+    new_username = st.text_input("Nouveau nom d'utilisateur")
+    
+    if st.button("Changer le nom d'utilisateur"):
+    
+            username = st.session_state.get('username')
+            success = db.change_username(username, new_username)
+            if success:
+                st.success("Nom d'utilisateur changé avec succès !")
+                st.session_state['username'] = new_username
+            else:
+                st.error("Échec du changement de nom d'utilisateur. Le nom d'utilisateur est déjà pris.")
 
 if __name__ == '__main__':
     main()
