@@ -254,5 +254,39 @@ class DatabaseManagerbis:
         """)
         results = cursor.fetchall()
         return [row[0] for row in results] if results else []
+
+        def get_taux_reussite_question(self, question_id: int) -> float:
+        cursor_correct = self.conn.execute("""
+            SELECT COUNT(*) 
+            FROM answers 
+            WHERE question_id = ? AND is_correct = 1;)
+            """, (question_id,))
+        result_correct = cursor_correct.fetchone()
+        cursor_total = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM answers
+            WHERE question_id = ?;
+            """, (question_id,))
+        result_total = cursor_total.fetchone()
+        return result_correct[0] / result_total[0] if result_total[0] > 0 else 0.0
+    
+    def get_taux_reussite_subject(self, subject: str) -> float:
+        cursor_total = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM answers
+            WHERE question_id IN (
+                SELECT question_id
+                FROM questions
+                WHERE subject = ?)""",(subject,))
+        result_total = cursor_total.fetchone()
+        cursor_correct = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM answers
+            WHERE question_id IN (
+                SELECT question_id
+                FROM questions
+                WHERE subject = ? AND is_correct = 1);""",(subject,))
+        result_correct = cursor_correct.fetchone()
+        return result_correct[0] / result_total[0] if result_total[0] > 0 else 0.0
     
  
