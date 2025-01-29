@@ -17,11 +17,12 @@ class DatabaseManagerbis:
                 last_name TEXT NOT NULL,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                super_user BOOLEAN NOT NULL
+                super_user BOOLEAN NOT NULL,
+                group TEXT #peut être vide (super_user)
             );
         """)
 
-        # Table questions avec 'category'
+        # Table questions avec 'subject' (matière)
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS questions (
                 question_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -31,7 +32,8 @@ class DatabaseManagerbis:
                 option3 TEXT NOT NULL,
                 option4 TEXT NOT NULL,
                 correct_index INTEGER NOT NULL,
-                category TEXT NOT NULL
+                subject TEXT NOT NULL,
+                chapter TEXT NOT NULL
             );
         """)
 
@@ -41,6 +43,7 @@ class DatabaseManagerbis:
                 quiz_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                speed_mode BOOLEAN NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(user_id)
             );
         """)
