@@ -18,7 +18,7 @@ class DatabaseManagerbis:
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 super_user BOOLEAN NOT NULL,
-                group TEXT #peut être vide (super_user)
+                group TEXT
             );
         """)
 
