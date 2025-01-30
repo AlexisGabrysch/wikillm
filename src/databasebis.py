@@ -154,6 +154,8 @@ class DatabaseManagerbis:
             question_text (str): Le texte de la question.
             options (List[str]): Liste des 4 options.
             correct_index (int): L'index (1-4) de la réponse correcte.
+            subject (str) : La matière ('histoire', 'maths', etc)
+            chapter (str) : Le chapitre ('2nd guerre mondiale', 'BRICS', etc)
 
         Returns:
             int: L'ID de la question ajoutée.
@@ -168,14 +170,14 @@ class DatabaseManagerbis:
         self.conn.commit()
         return cursor.lastrowid
 
-    def get_topics(self) -> List[str]:
+    def get_subjects(self) -> List[str]:
         """
-        Récupère la liste des sujets disponibles à partir des questions.
+        Récupère la liste des matières disponibles à partir des questions.
 
         Returns:
             List[str]: Liste des sujets uniques.
         """
-        cursor = self.conn.execute("SELECT DISTINCT category FROM questions;")
+        cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
         rows = cursor.fetchall()
         topics = [row[0] for row in rows if row[0]]
         return topics
