@@ -266,7 +266,7 @@ class DatabaseManagerbis:
         Returns :
             (float) : taux de réponses correctes
         """
-        # Nombre de bonne réponses (result_correct)
+        # Nombre de bonnes réponses (result_correct)
         cursor_correct = conn.execute("""
             SELECT COUNT(*) 
             FROM answers 
@@ -284,6 +284,15 @@ class DatabaseManagerbis:
         return result_correct / result_total if result_total > 0 else 0.0
     
     def get_taux_reussite_subject(self, subject: str) -> float:
+        """
+        Récupère le taux de réponses correctes pour une matière
+        Args :
+            subject (str) : nom de la matière
+
+        Returns :
+            (float) : taux de réponses correctes
+        """
+        # Nombre de bonnes réponses (result_correct)
         cursor_total = self.conn.execute("""
             SELECT COUNT(*)
             FROM answers
@@ -291,7 +300,9 @@ class DatabaseManagerbis:
                 SELECT question_id
                 FROM questions
                 WHERE subject = ?)""",(subject,))
-        result_total = cursor_total.fetchone()
+        result_total = cursor_total.fetchone()[0]
+        
+        # Nombre total de réponses (result_total)
         cursor_correct = self.conn.execute("""
             SELECT COUNT(*)
             FROM answers
@@ -299,7 +310,36 @@ class DatabaseManagerbis:
                 SELECT question_id
                 FROM questions
                 WHERE subject = ? AND is_correct = 1);""",(subject,))
-        result_correct = cursor_correct.fetchone()
-        return result_correct[0] / result_total[0] if result_total[0] > 0 else 0.0
+        result_correct = cursor_correct.fetchone()[0]
+        return result_correct / result_total if result_total > 0 else 0.0
+
+    def get_taux_reussite_chapter(self, chapter: str) -> float:
+        """
+        Récupère le taux de réponses correctes pour un chapitre
+        Args :
+            chapter (str) : nom de la matière
+
+        Returns :
+            (float) : taux de réponses correctes
+        """
+        # Nombre de bonnes réponses (result_correct)
+        cursor_total = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM answers
+            WHERE question_id IN (
+                SELECT question_id
+                FROM questions
+                WHERE chapter = ?)""",(chapter,))
+        result_total = cursor_total.fetchone()[0]
+        # Nombre total de réponses (result_total)
+        cursor_correct = self.conn.execute("""
+            SELECT COUNT(*)
+            FROM answers
+            WHERE question_id IN (
+                SELECT question_id
+                FROM questions
+                WHERE chapter = ? AND is_correct = 1);""",(chapter,))
+        result_correct = cursor_correct.fetchone()[0]
+        return result_correct / result_total if result_total > 0 else 0.0
     
  
