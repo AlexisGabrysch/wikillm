@@ -255,7 +255,7 @@ class DatabaseManagerbis:
         results = cursor.fetchall()
         return [row[0] for row in results] if results else []
 
-        def get_taux_reussite_question(self, question_id: int) -> float:
+    def get_taux_reussite_question(self, question_id: int) -> float:
         cursor_correct = self.conn.execute("""
             SELECT COUNT(*) 
             FROM answers 
