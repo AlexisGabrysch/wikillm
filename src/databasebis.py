@@ -264,13 +264,15 @@ class DatabaseManagerbis:
         Returns :
             (float) : taux de réponses correctes
         """
+        # Nombre de bonne réponses (result_correct)
         cursor_correct = conn.execute("""
             SELECT COUNT(*) 
             FROM answers 
             WHERE question_id = ? AND is_correct = 1
             """, (question_id,))
         result_correct = cursor_correct.fetchone()[0]
-
+        
+        # Nombre total de réponses (result_total)
         cursor_total = self.conn.execute("""
             SELECT COUNT(*)
             FROM answers
