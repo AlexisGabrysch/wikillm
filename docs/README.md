@@ -8,7 +8,7 @@ Instructions on how to install and set up your project.
 
 ```bash
 # Create env
-conda create -n wikillm python==3.11
+conda create -n wikillm python==3.10
 
 # Navigate to the project directory
 cd yourproject

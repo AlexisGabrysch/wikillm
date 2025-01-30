@@ -1,8 +1,9 @@
+# app.py
+
 import asyncio
 import streamlit as st
 from pages.ressources.components import Navbar, logout
 from src.databasebis import DatabaseManagerbis
-from src.database import DatabaseManager
 from src.rag import RAGPipeline
 from dotenv import find_dotenv, load_dotenv
 import os
@@ -10,6 +11,8 @@ import random
 import time
 from streamlit_autorefresh import st_autorefresh
 
+import sys
+sys.path.append('./src')  # Assurez-vous que le chemin est correct si nécessaire
 
 st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 
@@ -24,35 +27,17 @@ def main():
 
     # Initialisation de la base de données et du pipeline RAG
     db_manager = DatabaseManagerbis(db_path="./user_quiz.db")
-    db_rag = DatabaseManager(db_path="./chromadb_data")
     rag = RAGPipeline(
         generation_model="mistral-large-latest",
         role_prompt="Tu es un assistant pédagogique pour le programme de lycée français.",
-        db_path="./chromadb_data",
+        db_path="./user_quiz.db",  # Assurez-vous que le chemin est correct
         max_tokens=300,
         temperature=0.9,
         top_n=1,
     )
 
-    st.markdown(
-        """
-        <style>
-        div.stButton > button {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-        }
-        .button-row {
-            margin-bottom: 10px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
-
     # Barre de navigation
     Navbar()
-
     st.title("WikiLLM - Quiz et Chat avec l'IA")
 
     # Initialize session state for authentication
@@ -117,12 +102,14 @@ def main():
             st.session_state.start_time = time.time()
         if "time_spent" not in st.session_state:
             st.session_state.time_spent = []
+        if "answers" not in st.session_state:
+            st.session_state.answers = []
         if "mode" not in st.session_state:
             st.session_state.mode = "speed_test"
-        if "num_questions" not in st.session_state:
-            st.session_state.num_questions = 10
         if "quiz_started" not in st.session_state:
             st.session_state.quiz_started = False
+        if "num_questions" not in st.session_state:
+            st.session_state.num_questions = 10
 
         # Fonction pour calculer le temps écoulé
         def get_elapsed_time():
@@ -132,8 +119,7 @@ def main():
         st.header("Quiz")
 
         # Charger les sujets
-        topics = db_rag.get_topics()
-
+        topics = db_manager.get_topics()  # Assurez-vous d'avoir cette méthode
         if not topics:
             st.warning("Aucun sujet disponible. Veuillez ajouter des documents à la base de données.")
             return
@@ -142,7 +128,14 @@ def main():
         selected_topics = st.multiselect("Choisissez un ou plusieurs sujets :", topics, disabled=st.session_state.quiz_started)
 
         # Sélection du nombre de questions
-        num_questions = st.number_input("Nombre de questions :", min_value=1, max_value=50, value=10, step=1, disabled=st.session_state.quiz_started)
+        num_questions = st.number_input(
+            "Nombre de questions :", 
+            min_value=1, 
+            max_value=50, 
+            value=10, 
+            step=1, 
+            disabled=st.session_state.quiz_started
+        )
 
         # Sélection du mode de quiz
         mode = st.radio("Choisissez le mode de quiz :", ("speed_test", "chill"), disabled=st.session_state.quiz_started)
@@ -151,33 +144,33 @@ def main():
             if not selected_topics:
                 st.error("Veuillez sélectionner au moins un sujet pour commencer le quiz.")
             else:
-                st.session_state.quiz_data = []
-                st.session_state.current_question_index = 0
-                st.session_state.score = 0
-                st.session_state.completed_quiz = False
-                st.session_state.time_spent = []  # Réinitialiser le temps passé
-                st.session_state.answers = []  # Réinitialiser les réponses
-                st.session_state.mode = mode
-                st.session_state.num_questions = num_questions
-                st.session_state.quiz_started = True
+                # Créer un nouveau quiz dans la base de données
+                quiz_id = db_manager.add_quiz(st.session_state.user_id)
 
                 # Générer les questions pour le quiz
                 for _ in range(num_questions):
                     topic = random.choice(selected_topics)
                     quiz_data = rag.generate_quiz_question(topic)
-                    if quiz_data["correct_index"] != -1:
+                    if quiz_data["correct_index"] != -1 and quiz_data["question_id"] != -1:
                         st.session_state.quiz_data.append(quiz_data)
 
                 if not st.session_state.quiz_data:
                     st.error("Aucune question n'a pu être générée. Veuillez réessayer.")
                 else:
-                    st.session_state.start_time = time.time()  # Initialiser le timer après la génération des questions
-                    st.rerun()  # Rafraîchir la page pour afficher la première question
+                    st.session_state.current_question_index = 0
+                    st.session_state.score = 0
+                    st.session_state.completed_quiz = False
+                    st.session_state.time_spent = []
+                    st.session_state.answers = []
+                    st.session_state.mode = mode
+                    st.session_state.quiz_started = True
+                    st.session_state.start_time = time.time()
+                    st.rerun()
 
         # Gestion du quiz
         if st.session_state.quiz_data and not st.session_state.completed_quiz:
-            
             question_data = st.session_state.quiz_data[st.session_state.current_question_index]
+            question_id = question_data["question_id"]
             question = question_data["question"]
             options = question_data["options"]
             correct_index = question_data["correct_index"]
@@ -198,42 +191,61 @@ def main():
                 # Vérifier si le temps est écoulé
                 if elapsed_time >= 30:
                     st.session_state.time_spent.append(30)
-                    st.session_state.answers.append({"question": question, "answer": None, "correct": False})
+                    st.session_state.answers.append({
+                        "question_id": question_id,
+                        "selected_option": None,
+                        "is_correct": False
+                    })
+
+                    # Enregistrer l'absence de réponse dans la base de données
+                    db_manager.add_answer(quiz_id, question_id, None, False)
 
                     if st.session_state.current_question_index + 1 < len(st.session_state.quiz_data):
                         st.session_state.current_question_index += 1
-                        st.session_state.start_time = time.time()  # Réinitialiser le timer pour la prochaine question
+                        st.session_state.start_time = time.time()
+                        st.rerun()
                     else:
                         st.session_state.completed_quiz = True
-                    st.rerun()
+                        st.rerun()
 
             # Affichage des options
             for i, option in enumerate(options):
-                if st.button(option, key=f"option_{i}"):
+                if st.button(option, key=f"option_{st.session_state.current_question_index}_{i}"):
                     elapsed_time = get_elapsed_time()
+                    selected_option = i + 1
+                    is_correct = (selected_option == correct_index)
                     st.session_state.time_spent.append(elapsed_time)
-                    correct = i == correct_index
-                    st.session_state.answers.append({"question": question, "answer": option, "correct": correct})
-                    if correct:
+                    st.session_state.answers.append({
+                        "question_id": question_id,
+                        "selected_option": selected_option,
+                        "is_correct": is_correct
+                    })
+
+                    # Enregistrer la réponse dans la base de données
+                    db_manager.add_answer(quiz_id, question_id, selected_option, is_correct)
+
+                    if is_correct:
                         st.session_state.score += 1
 
                     if st.session_state.current_question_index + 1 < len(st.session_state.quiz_data):
                         st.session_state.current_question_index += 1
-                        st.session_state.start_time = time.time()  # Réinitialiser le timer pour la prochaine question
+                        st.session_state.start_time = time.time()
+                        st.rerun()
                     else:
                         st.session_state.completed_quiz = True
-                    st.rerun()
+                        st.rerun()
 
             if st.session_state.mode == "chill":
-                # Afficher l'explication et l'option pour générer un indice
+                # Optionnel : Afficher des explications ou des indices
                 if st.session_state.answers:
                     last_answer = st.session_state.answers[-1]
-                    if last_answer["correct"]:
+                    if last_answer["is_correct"]:
                         st.success("Bonne réponse !")
                     else:
                         st.error("Mauvaise réponse.")
+                    # Récupérer l'explication depuis la question générée
                     st.markdown(f"**Explication :** {question_data.get('explanation', 'Aucune explication disponible.')}")
-
+                
                 if st.button("Obtenir un indice"):
                     hint = rag.generate_hint(question, [question_data.get('context', '')])
                     st.info(f"Indice : {hint}")
@@ -247,38 +259,21 @@ def main():
                         st.session_state.completed_quiz = True
                     st.rerun()
 
-            # Bouton pour terminer le quiz
-            if st.button("Terminer le quiz"):
-                st.session_state.completed_quiz = True
-                st.rerun()
-
         if st.session_state.completed_quiz:
             st.header("Récapitulatif du Quiz")
             st.markdown(f"### Score final : {st.session_state.score} / {len(st.session_state.quiz_data)}")
 
             st.write("**Détails des questions :**")
             for i, question_data in enumerate(st.session_state.quiz_data):
+                question_id = question_data["question_id"]
                 question = question_data["question"]
                 correct_index = question_data["correct_index"]
-                st.write(f"Question {i + 1}: {question}")
-                if i < len(st.session_state.time_spent):
-                    st.write(f"Temps passé : {st.session_state.time_spent[i]} secondes")
-                else:
-                    st.write("Temps passé : N/A")
-                if i < len(st.session_state.answers):
-                    answer = st.session_state.answers[i]
-                    st.write(f"Votre réponse : {answer['answer']}")
-                    st.write(f"Correct : {'Oui' if answer['correct'] else 'Non'}")
-                    if st.session_state.mode == "chill":
-                        st.markdown(f"**Explication :** {question_data.get('explanation', 'Aucune explication disponible.')}")
-            if st.session_state.quiz_started:
-                st.session_state.quiz_started = False
-                st.rerun()
-        
-        
-        
-    if not API_KEY:
-        st.warning("Veuillez ajouter votre clé API Mistral dans le fichier `.env`. Redémarrez l'application après avoir ajouté la clé.")
+                selected_option = st.session_state.answers[i]["selected_option"]
+                is_correct = st.session_state.answers[i]["is_correct"]
+                time_spent = st.session_state.time_spent[i] if i < len(st.session_state.time_spent) else "N/A"
 
-if __name__ == '__main__':
-    main()
+                st.write(f"**Question {i + 1} :** {question}")
+                st.write(f"**Votre réponse :** {selected_option if selected_option else 'Aucune réponse'}")
+                st.write(f"**Correct :** {'Oui' if is_correct else 'Non'}")
+                st.write(f"**Temps passé :** {time_spent} secondes")
+                st.write("---")
