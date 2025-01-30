@@ -170,13 +170,6 @@ def main():
 
         if st.session_state.mode == "chill":
             # Afficher l'explication et l'option pour générer un indice
-            if st.session_state.answers:
-                last_answer = st.session_state.answers[-1]
-                if last_answer["correct"]:
-                    st.success("Bonne réponse !")
-                else:
-                    st.error("Mauvaise réponse.")
-                st.markdown(f"**Explication :** {question_data.get('explanation', 'Aucune explication disponible.')}")
 
             if st.button("Obtenir un indice"):
                 hint = rag.generate_hint(question, [question_data.get('context', '')])
@@ -190,7 +183,13 @@ def main():
                 else:
                     st.session_state.completed_quiz = True
                 st.rerun()
-
+            if st.session_state.answers:
+                last_answer = st.session_state.answers[-1]
+                if last_answer["correct"]:
+                    st.success("Bonne réponse !")
+                else:
+                    st.error("Mauvaise réponse.")
+                st.markdown(f"**Explication :** {question_data.get('explanation', 'Aucune explication disponible.')}")
         # Bouton pour terminer le quiz
         if st.button("Terminer le quiz"):
             st.session_state.completed_quiz = True
