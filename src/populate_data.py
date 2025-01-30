@@ -1,23 +1,27 @@
 # src/populate_data.py
 
-from databasebis import DatabaseManager
+from databasebis import DatabaseManagerbis
 import hashlib
 import random
 from datetime import datetime
 import os
 
-def add_simulated_users(db: DatabaseManager):
+def add_simulated_users(db: DatabaseManagerbis):
     users = [
-        {"first_name": "Alice", "last_name": "Smith", "username": "alice", "password": "password123"},
-        {"first_name": "Bob", "last_name": "Johnson", "username": "bob", "password": "securepass"},
-        {"first_name": "Charlie", "last_name": "Lee", "username": "charlie", "password": "charliepwd"},
+        {"first_name": "Alice", "last_name": "Smith", "username": "alice", "password": "password123", "super_user": 0, "group_id": "1er"},
+        {"first_name": "Bob", "last_name": "Johnson", "username": "bob", "password": "securepass", "super_user": 0, "group_id": "3e"},
+        {"first_name": "Charlie", "last_name": "Lee", "username": "charlie", "password": "charliepwd", "super_user": 0, "group_id": "3e"},
+        {"first_name": "John", "last_name": "Doe", "username": "joe", "password": "joepwd", "super_user": 0, "group_id":"4e"},
+        {"first_name": "root", "last_name": "root", "username": "root", "password": "root", "super_user": 1, "group_id":None}
     ]
     for user in users:
-        success = db.add_user(user["first_name"], user["last_name"], user["username"], user["password"])
+        success = db.add_user(user["first_name"], user["last_name"], user["username"], user["password"], user["super_user"], user["group_id"])
         if not success:
             print(f"Username {user['username']} already exists.")
 
-def add_simulated_questions(db: DatabaseManager):
+
+
+def add_simulated_questions(db: DatabaseManagerbis):
     questions = [
         {
             "question_text": "What is the capital of France?",
@@ -25,7 +29,9 @@ def add_simulated_questions(db: DatabaseManager):
             "option2": "London",
             "option3": "Paris",
             "option4": "Madrid",
-            "correct_index": 3
+            "correct_index": 3,
+            "subject": "geo",
+            "chapter": "chap1"
         },
         {
             "question_text": "What is 2 + 2?",
@@ -33,24 +39,29 @@ def add_simulated_questions(db: DatabaseManager):
             "option2": "4",
             "option3": "5",
             "option4": "22",
-            "correct_index": 2
+            "correct_index": 2,
+            "subject": "histoire",
+            "chapter": "chap2"
         },
         # Add more questions as needed
     ]
-    for q in questions:
-        db.conn.execute("""
-            INSERT INTO questions (question_text, option1, option2, option3, option4, correct_index)
-            VALUES (?, ?, ?, ?, ?, ?);
-        """, (q["question_text"], q["option1"], q["option2"], q["option3"], q["option4"], q["correct_index"]))
+    for question in questions:
+        db.add_question(
+            question["question_text"],
+            [question["option1"], question["option2"], question["option3"], question["option4"]],
+            question["correct_index"],
+            question["subject"],
+            question["chapter"]
+        )
 
-def add_simulated_quizzes(db: DatabaseManager):
+def add_simulated_quizzes(db: DatabaseManagerbis):
     users = db.conn.execute("SELECT user_id FROM users;").fetchall()
     questions = db.conn.execute("SELECT question_id, correct_index FROM questions;").fetchall()
     
     for user in users:
         cursor = db.conn.execute("""
-            INSERT INTO quizzes (user_id, timestamp)
-            VALUES (?, ?);
+            INSERT INTO quizzes (user_id, timestamp, speed_mode)
+            VALUES (?, ?, 0);
         """, (user[0], datetime.now()))
         quiz_id = cursor.lastrowid  # Use lastrowid instead of fetchone()[0]
         
@@ -67,7 +78,7 @@ def main():
     # Use absolute path to ensure consistency
     base_dir = os.path.dirname(os.path.abspath(__file__))
     db_path = os.path.join(base_dir, "..", "user_quiz.db")
-    db = DatabaseManager(db_path=db_path)
+    db = DatabaseManagerbis(db_path=db_path)
     add_simulated_users(db)
     add_simulated_questions(db)
     add_simulated_quizzes(db)

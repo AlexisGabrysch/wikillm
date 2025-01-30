@@ -18,9 +18,11 @@ class DatabaseManagerbis:
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
                 super_user BOOLEAN NOT NULL,
-                group TEXT
+                group_id TEXT
             );
         """)
+
+
 
         # Table questions avec 'subject' (matière)
         self.conn.execute("""
@@ -37,6 +39,8 @@ class DatabaseManagerbis:
             );
         """)
 
+
+
         # Table quizzes
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS quizzes (
@@ -47,6 +51,7 @@ class DatabaseManagerbis:
                 FOREIGN KEY(user_id) REFERENCES users(user_id)
             );
         """)
+
 
         # Table answers
         self.conn.execute("""
@@ -62,15 +67,39 @@ class DatabaseManagerbis:
         """)
 
     def hash_password(self, password: str) -> str:
+        """
+        Encode un mot de passe en SHA-256.
+
+        Args:
+            password (str): Mot de passe à encoder.
+        
+        Returns:    
+            str: Mot de passe encodé.
+        """
         return hashlib.sha256(password.encode()).hexdigest()
 
-    def add_user(self, first_name: str, last_name: str, username: str, password: str) -> bool:
+    def add_user(self, first_name: str, last_name: str, username: str, password: str, super_user: bool, group_id: str) -> bool:
+        """
+        Ajoute un nouvel utilisateur à la table 'users'.
+
+        Args:
+            first_name (str): Prénom.
+            last_name (str): Nom de famille.
+            username (str): Nom d'utilisateur.
+            password (str): Mot de passe.
+            super_user (bool): True si l'utilisateur est un super utilisateur, False sinon.
+            group_id (str): ID du groupe.
+        
+        Returns:    
+            bool: True si l'utilisateur a été ajouté avec succès, False sinon.
+        """
+        
         try:
             password_hash = self.hash_password(password)
             self.conn.execute("""
-                INSERT INTO users (first_name, last_name, username, password_hash)
-                VALUES (?, ?, ?, ?);
-            """, (first_name, last_name, username, password_hash))
+                INSERT INTO users (first_name, last_name, username, password_hash, super_user, group_id)
+                VALUES (?, ?, ?, ?, ?, ?);
+            """, (first_name, last_name, username, password_hash, super_user, group_id))
             self.conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -93,15 +122,35 @@ class DatabaseManagerbis:
         """, (username, password_hash))
         return cursor.fetchone() is not None
 
-    def add_quiz(self, user_id: int) -> int:
+    def add_quiz(self, user_id: int, speed_mode: bool) -> int:
+        """
+        Ajoute un nouveau quiz à la table 'quizzes' et retourne son ID.
+
+        Args:
+            user_id (int): ID de l'utilisateur.
+            speed_mode (bool): True si le mode rapide est activé, False sinon.
+
+        Returns:
+            int: ID du quiz ajouté.
+        """
         cursor = self.conn.execute("""
-            INSERT INTO quizzes (user_id)
-            VALUES (?);
-        """, (user_id,))
+            INSERT INTO quizzes (user_id, speed_mode)
+            VALUES (?, ?);
+        """, (user_id, speed_mode))
         self.conn.commit()
         return cursor.lastrowid
 
     def add_answer(self, quiz_id: int, question_id: int, selected_option: int, is_correct: bool):
+        """
+        Ajoute une nouvelle réponse à la table 'answers'.
+
+        Args:
+            quiz_id (int): ID du quiz.
+            question_id (int): ID de la question.
+            selected_option (int): Index de l'option sélectionnée (1-4).
+            is_correct (bool): True si la réponse est correcte, False sinon.
+
+        """
         self.conn.execute("""
             INSERT INTO answers (quiz_id, question_id, selected_option, is_correct)
             VALUES (?, ?, ?, ?, ?);
@@ -109,6 +158,15 @@ class DatabaseManagerbis:
         self.conn.commit()
 
     def get_question_by_id(self, question_id: int) -> Dict[str, Any]:
+        """
+        Récupère une question à partir de son ID.
+
+        Args:
+            question_id (int): ID de la question.
+
+        Returns:
+            Dict[str, Any]: Dictionnaire contenant les détails de la question.
+        """
         cursor = self.conn.execute("""
             SELECT question_id, question_text, option1, option2, option3, option4, correct_index
             FROM questions
@@ -125,7 +183,18 @@ class DatabaseManagerbis:
         return {}
 
     def get_random_questions(self, num_questions: int, selected_topics: List[str]) -> List[Dict[str, Any]]:
-        # Supposons que vous avez une colonne 'category' dans la table 'questions'
+        """
+        Génère un certain nombre de questions aléatoires pour les sujets sélectionnés.
+
+        Args:
+            num_questions (int): Nombre de questions à générer.
+            selected_topics (List[str]): Liste des sujets sélectionnés.
+
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant les détails des questions.
+
+        """
+
         placeholders = ','.join('?' for _ in selected_topics)
         query = f"""
             SELECT question_id, question_text, option1, option2, option3, option4, correct_index
@@ -146,7 +215,7 @@ class DatabaseManagerbis:
             })
         return questions
 
-    def add_question(self, question_text: str, options: List[str], correct_index: int) -> int:
+    def add_question(self, question_text: str, options: List[str], correct_index: int, subject: str, chapter: str) -> int:
         """
         Ajoute une nouvelle question à la table 'questions' et retourne son ID.
 
@@ -164,9 +233,9 @@ class DatabaseManagerbis:
             raise ValueError("Il doit y avoir exactement 4 options.")
 
         cursor = self.conn.execute("""
-            INSERT INTO questions (question_text, option1, option2, option3, option4, correct_index)
-            VALUES (?, ?, ?, ?, ?, ?);
-        """, (question_text, options[0], options[1], options[2], options[3], correct_index))
+            INSERT INTO questions (question_text, option1, option2, option3, option4, correct_index, subject, chapter)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+        """, (question_text, options[0], options[1], options[2], options[3], correct_index, subject, chapter))
         self.conn.commit()
         return cursor.lastrowid
 
@@ -177,6 +246,7 @@ class DatabaseManagerbis:
         Returns:
             List[str]: Liste des sujets uniques.
         """
+        cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
         cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
         rows = cursor.fetchall()
         topics = [row[0] for row in rows if row[0]]
@@ -230,6 +300,15 @@ class DatabaseManagerbis:
         return True
 
     def get_super_user(self, username: str) -> bool:
+        """
+        Retrouve si un utilisateur est un super user.
+
+        Args:
+            username (str): Nom d'utilisateur.
+
+        Returns:
+            bool: True si l'utilisateur est un super user, False sinon.
+        """
         cursor = self.conn.execute("""
             SELECT super_user FROM users WHERE username = ?;
         """, (username,))
@@ -237,25 +316,50 @@ class DatabaseManagerbis:
         return bool(result[0]) if result else False
     
     def get_quiz_mode(self) -> str:
+        """
+        Retourne le mode de quiz (normal ou rapide) pour chaque quiz.
+
+        Returns:   
+            List[str]: Liste des modes
+        """
         cursor = self.conn.execute("""
-            SELECT mode FROM quizzes;
+            SELECT speed_mode FROM quizzes;
         """)
         results = cursor.fetchall()
         return [row[0] for row in results] if results else []
     
     def get_timestamp(self) -> str:
+        """
+        Retourne les timestamps de chaque quiz.
+
+        Returns:
+            List[str]: Liste des timestamps
+        """
         cursor = self.conn.execute("""
             SELECT DISTINCT timestamp FROM quizzes;
         """)
         results = cursor.fetchall()
         return [row[0] for row in results] if results else []
     
-    def get_quizz_id(self) -> str:
+    def get_quizz_id(self, username: str) -> int:
+        """
+        Compte le nombre de quizz réalisé pour un utilisateur donné.
+
+        Args:
+            username (str): Nom d'utilisateur.
+
+        Returns:
+            int: ID du quizz.
+        """
+
         cursor = self.conn.execute("""
-            SELECT COUNT(DISTINCT quizz_id) FROM quizzes;
-        """)
-        results = cursor.fetchall()
-        return [row[0] for row in results] if results else []
+            SELECT COUNT(*)
+            FROM quizzes
+            JOIN users ON quizzes.user_id = users.user_id
+            WHERE users.username = ?;
+        """, (username,))
+        count = cursor.fetchone()[0]
+        return count
 
     def get_taux_reussite_question(self, question_id: int) -> float:
         """
@@ -267,7 +371,7 @@ class DatabaseManagerbis:
             (float) : taux de réponses correctes
         """
         # Nombre de bonnes réponses (result_correct)
-        cursor_correct = conn.execute("""
+        cursor_correct = self.conn.execute("""
             SELECT COUNT(*) 
             FROM answers 
             WHERE question_id = ? AND is_correct = 1
@@ -292,7 +396,7 @@ class DatabaseManagerbis:
         Returns :
             (float) : taux de réponses correctes
         """
-        # Nombre de bonnes réponses (result_correct)
+        # Nombre de bonnes réponses (result_correct))
         cursor_total = self.conn.execute("""
             SELECT COUNT(*)
             FROM answers
@@ -310,6 +414,7 @@ class DatabaseManagerbis:
                 SELECT question_id
                 FROM questions
                 WHERE subject = ? AND is_correct = 1);""",(subject,))
+    
         result_correct = cursor_correct.fetchone()[0]
         return result_correct / result_total if result_total > 0 else 0.0
 
@@ -318,7 +423,6 @@ class DatabaseManagerbis:
         Récupère le taux de réponses correctes pour un chapitre
         Args :
             chapter (str) : nom de la matière
-
         Returns :
             (float) : taux de réponses correctes
         """
@@ -341,5 +445,67 @@ class DatabaseManagerbis:
                 WHERE chapter = ? AND is_correct = 1);""",(chapter,))
         result_correct = cursor_correct.fetchone()[0]
         return result_correct / result_total if result_total > 0 else 0.0
+
+
+    def get_taux_reussite_user(self, username: str) -> float:
+        """
+        Calcule le taux de réussite pour un élève donné.
+
+        Args:
+            username (str): Nom d'utilisateur de l'élève.
+
+        Returns:
+            float: Taux de réussite (entre 0.0 et 1.0).
+        """
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) as total, 
+                   SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) as correct
+            FROM answers
+            JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
+            JOIN users ON quizzes.user_id = users.user_id
+            WHERE users.username = ?;
+        """, (username,))
+        result = cursor.fetchone()
+        total = result[0]
+        correct = result[1] if result[1] is not None else 0
+        return correct / total if total > 0 else 0.0
+    
+    
+    def get_taux_reussite_user_over_time(self, username: str) -> List[Dict[str, Any]]:
+        """
+        Calcule le taux de réussite au fil du temps pour un utilisateur donné.
+
+        Args:
+            username (str): Nom d'utilisateur.
+
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant la période et le taux de réussite.
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                strftime('%Y-%m-%d', quizzes.timestamp) AS periode,
+                COUNT(answers.answer_id) AS total_reponses,
+                SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS reponses_correctes
+            FROM answers
+            JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
+            JOIN users ON quizzes.user_id = users.user_id
+            WHERE users.username = ?
+            GROUP BY periode
+            ORDER BY periode;
+        """, (username,))
+        
+        results = cursor.fetchall()
+        taux_reussite_temps = []
+        
+        for row in results:
+            periode, total, correct = row
+            taux = (correct / total) * 100 if total > 0 else 0.0
+            taux_reussite_temps.append({
+                "Période": periode,
+                "Taux de Réussite (%)": round(taux, 2)
+            })
+        
+        return taux_reussite_temps
+    
     
  
