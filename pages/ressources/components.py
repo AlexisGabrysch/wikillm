@@ -1,6 +1,5 @@
 import streamlit as st
 
-
 # Function to handle user logout
 def logout():
     st.session_state.authenticated = False
