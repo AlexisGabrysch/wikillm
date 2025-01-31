@@ -239,6 +239,22 @@ class DatabaseManagerbis:
         self.conn.commit()
         return cursor.lastrowid
 
+    def get_global_success_rate(self) -> float:
+        """
+        Calcule le taux de réussite global.
+
+        Returns:
+            float: Taux de réussite global en pourcentage.
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                CAST(SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
+                COUNT(*) AS success_rate
+            FROM answers;
+        """)
+        row = cursor.fetchone()
+        return round(row[0], 2) if row and row[0] is not None else 0.0
+
     def get_subjects(self) -> List[str]:
         """
         Récupère la liste des matières disponibles à partir des questions.
@@ -246,7 +262,6 @@ class DatabaseManagerbis:
         Returns:
             List[str]: Liste des sujets uniques.
         """
-        cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
         cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
         rows = cursor.fetchall()
         topics = [row[0] for row in rows if row[0]]
@@ -315,18 +330,31 @@ class DatabaseManagerbis:
         result = cursor.fetchone()
         return bool(result[0]) if result else False
     
-    def get_quiz_mode(self) -> str:
+    def get_average_success_rate_by_mode(self) -> List[Dict[str, Any]]:
         """
-        Retourne le mode de quiz (normal ou rapide) pour chaque quiz.
+        Calcule le taux de réussite moyen pour chaque mode de quizz.
 
-        Returns:   
-            List[str]: Liste des modes
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant 'mode' et 'average_success_rate'.
         """
         cursor = self.conn.execute("""
-            SELECT speed_mode FROM quizzes;
+            SELECT 
+                CASE 
+                    WHEN speed_mode = 1 THEN 'Speed' 
+                    ELSE 'Normal' 
+                END as mode,
+                CAST(SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
+                COUNT(answers.answer_id) *100 AS average_success_rate
+            FROM quizzes
+            JOIN answers ON quizzes.quiz_id = answers.quiz_id
+            GROUP BY speed_mode;
         """)
-        results = cursor.fetchall()
-        return [row[0] for row in results] if results else []
+        return [
+            {
+                "mode": row[0],
+                "average_success_rate": round(row[1], 2) if row[1] is not None else 0.0
+            } for row in cursor.fetchall()
+        ]
     
     def get_timestamp(self) -> str:
         """
@@ -506,6 +534,200 @@ class DatabaseManagerbis:
             })
         
         return taux_reussite_temps
+    
+    
+    def get_taux_reussite_topics_user(self, username: str, topics: str ) -> List[Dict[str, Any]]:
+        """
+        Calcule le taux de réussite par subject ou par chapter pour un utilisateur donné.
+
+        Args:
+            username (str): Nom d'utilisateur
+            topics (str): 'subject' ou 'chapter'
+
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant le sujet et le taux de réussite.
+        """
+        cursor = self.conn.execute(f"""
+            SELECT 
+                questions.{topics},
+                COUNT(answers.answer_id) AS total_reponses,
+                SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS reponses_correctes
+            FROM answers
+            JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
+            JOIN users ON quizzes.user_id = users.user_id
+            JOIN questions ON answers.question_id = questions.question_id
+            WHERE users.username = ?
+            GROUP BY questions.subject
+            ORDER BY questions.subject;
+        """, (username,))
+        
+        results = cursor.fetchall()
+        taux_reussite_topics = []
+        
+        for row in results:
+            subject, total, correct = row
+            taux = (correct / total) * 100 if total > 0 else 0.0
+            taux_reussite_topics.append({
+                "Sujet": subject,
+                "Taux de Réussite (%)": round(taux, 2)
+            })
+        
+        return taux_reussite_topics
+
+
+    def get_total_users(self) -> int:
+        cursor = self.conn.execute("SELECT COUNT(*) FROM users;")
+        return cursor.fetchone()[0]
+
+    def get_total_questions(self) -> int:
+        cursor = self.conn.execute("SELECT COUNT(*) FROM questions;")
+        return cursor.fetchone()[0]
+
+    def get_total_quizzes(self) -> int:
+        cursor = self.conn.execute("SELECT COUNT(*) FROM quizzes;")
+        return cursor.fetchone()[0]
+    
+    def get_quiz_count_by_mode(self, mode: int) -> int:
+        """
+        Retourne le nombre de quizz selon le mode spécifié.
+
+        Args:
+            mode (int): Le mode du quizz ( 1 pour speed ou 0 pour normal).
+
+        Returns:
+            int: Nombre de quizz pour le mode spécifié.
+        """
+        if mode == 1: # 1 pour le mode rapide
+            speed_mode = 1
+        else :
+            speed_mode = 0
+        
+        
+        cursor = self.conn.execute("""
+            SELECT COUNT(*) FROM quizzes WHERE speed_mode = ?;
+        """, (speed_mode,))
+        return cursor.fetchone()[0]
+
+    def get_questions_metrics(self) -> List[Dict[str, Any]]:
+        cursor = self.conn.execute("""
+            SELECT question_text, 
+                    AVG(CASE WHEN is_correct = 1 THEN 1.0 ELSE 0.0 END) as correct_rate
+            FROM questions
+            JOIN answers ON questions.question_id = answers.question_id
+            GROUP BY questions.question_id;
+        """)
+        return [{"question_text": row[0], "correct_rate": row[1]} for row in cursor.fetchall()]
+
+    def get_users_data(self) -> List[Dict[str, Any]]:
+        cursor = self.conn.execute("""
+            SELECT username, COUNT(quizzes.quiz_id) as quiz_count
+            FROM users
+            JOIN quizzes ON users.user_id = quizzes.user_id
+            GROUP BY users.user_id;
+        """)
+        return [{"username": row[0], "quiz_count": row[1]} for row in cursor.fetchall()]
+
+    def generate_question(self, topic: str) -> Dict[str, Any]:
+        # Implement question generation logic
+        return {
+            "question_text": "New generated question?",
+            "options": ["Option1", "Option2", "Option3", "Option4"],
+            "correct_index": 1,
+            "explanation": "Explanation of the answer.",
+            "chapter": "Generated Chapter"
+        }
+
+    def get_custom_graph_data(self, x: str, y: str) -> List[Dict[str, Any]]:
+        # Implement custom graph data retrieval based on x and y
+        return []
+
+    def get_user_success_rates(self) -> List[Dict[str, Any]]:
+        """
+        Calcule le taux de réussite pour chaque utilisateur.
+
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant 'username' et 'success_rate'.
+        """
+        cursor = self.conn.execute("""
+            SELECT users.username,
+                   CAST(SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
+                   COUNT(answers.answer_id) AS success_rate
+            FROM users
+            LEFT JOIN quizzes ON users.user_id = quizzes.user_id
+            LEFT JOIN answers ON quizzes.quiz_id = answers.quiz_id
+            GROUP BY users.user_id;
+        """)
+        return [{"username": row[0], "success_rate": round(row[1] * 100, 2)} for row in cursor.fetchall()]
+
+    def get_leaderboard(self) -> List[Dict[str, Any]]:
+        cursor = self.conn.execute("""
+            SELECT users.username, COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
+                   CAST(SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
+                   COUNT(answers.answer_id) AS success_rate
+            FROM users
+            JOIN quizzes ON users.user_id = quizzes.user_id
+            JOIN answers ON quizzes.quiz_id = answers.quiz_id
+            GROUP BY users.user_id
+            ORDER BY total_quizzes DESC
+            LIMIT 10;
+        """)
+        return [
+            {
+                "username": row[0],
+                "total_quizzes": row[1],
+                "success_rate": round(row[2] * 100, 2)
+            } for row in cursor.fetchall()
+        ]
+
+    
+    # def get_quizz_id_by_topics(self, username: str, topics: str, selected_topics: str) -> int:
+    #     """
+    #     Compte le nombre de quiz réalisés par un utilisateur pour suject/topics donné.
+
+    #     Args:
+    #         username (str): Nom d'utilisateur.
+    #         topics (str): suject ou chapter.
+    #         selected_topics (str): Nom du topics sélectionné.
+
+    #     Returns:
+    #         int: Nombre de quiz réalisés.
+    #     """
+    #     print(selected_topics)
+    #     cursor = self.conn.execute(f"""
+    #         SELECT COUNT(DISTINCT quizzes.quiz_id)
+    #         FROM quizzes
+    #         JOIN users ON quizzes.user_id = users.user_id
+    #         JOIN answers ON quizzes.quiz_id = answers.quiz_id
+    #         JOIN questions ON answers.question_id = questions.question_id
+    #         WHERE users.username = ? AND questions.{topics} = {selected_topics};
+    #     """, (username, topics))
+    #     count = cursor.fetchone()[0]
+    #     return count
+    
+    # def get_taux_reussite_user_by_topics(self, username: str, topics: str) -> float:
+    #     """
+    #     Calcule le taux de réussite pour un utilisateur dans un chapitre donné.
+
+    #     Args:
+    #         username (str): Nom d'utilisateur.
+    #         topics (str): Nom du chapitre.
+
+    #     Returns:
+    #         float: Taux de réussite (entre 0.0 et 1.0).
+    #     """
+    #     cursor = self.conn.execute(f"""
+    #         SELECT COUNT(*) as total, 
+    #                SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) as correct
+    #         FROM answers
+    #         JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
+    #         JOIN users ON quizzes.user_id = users.user_id
+    #         JOIN questions ON answers.question_id = questions.question_id
+    #         WHERE users.username = ? AND questions.{topics} = ?;
+    #     """, (username, topics))
+    #     result = cursor.fetchone()
+    #     total = result[0]
+    #     correct = result[1] if result[1] is not None else 0
+    #     return correct / total if total > 0 else 0.0
     
     
  
