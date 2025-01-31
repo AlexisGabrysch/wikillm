@@ -1,6 +1,4 @@
 import streamlit as st
-import os
-from src.databasebis import DatabaseManagerbis
 
 
 # Function to handle user logout
@@ -39,7 +37,6 @@ def Navbar():
         # Display user information and logout button if authenticated
         if st.session_state.get('authenticated'):
             st.write(f"**Logged in as:** {st.session_state.get('username')}")
-            st.header("Déconnexion")
             if st.button("Logout"):
                 logout()
         else:
