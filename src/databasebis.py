@@ -17,8 +17,8 @@ class DatabaseManagerbis:
                 last_name TEXT NOT NULL,
                 username TEXT UNIQUE NOT NULL,
                 password_hash TEXT NOT NULL,
-                super_user BOOLEAN NOT NULL,
-                group_id TEXT
+                super_user BOOLEAN NOT NULL
+                
             );
         """)
 
@@ -35,7 +35,8 @@ class DatabaseManagerbis:
                 option4 TEXT NOT NULL,
                 correct_index INTEGER NOT NULL,
                 subject TEXT NOT NULL,
-                chapter TEXT NOT NULL
+                chapter TEXT NOT NULL 
+                
             );
         """)
 
@@ -61,6 +62,8 @@ class DatabaseManagerbis:
                 question_id INTEGER,
                 selected_option INTEGER,
                 is_correct BOOLEAN,
+                answer_time FLOAT NOT NULL,
+                indice BOOLEAN,
                 FOREIGN KEY(quiz_id) REFERENCES quizzes(quiz_id),
                 FOREIGN KEY(question_id) REFERENCES questions(question_id)
             );
@@ -78,7 +81,7 @@ class DatabaseManagerbis:
         """
         return hashlib.sha256(password.encode()).hexdigest()
 
-    def add_user(self, first_name: str, last_name: str, username: str, password: str, super_user: bool, group_id: str) -> bool:
+    def add_user(self, first_name: str, last_name: str, username: str, password: str, super_user: bool) -> bool:
         """
         Ajoute un nouvel utilisateur à la table 'users'.
 
@@ -88,7 +91,7 @@ class DatabaseManagerbis:
             username (str): Nom d'utilisateur.
             password (str): Mot de passe.
             super_user (bool): True si l'utilisateur est un super utilisateur, False sinon.
-            group_id (str): ID du groupe.
+            
         
         Returns:    
             bool: True si l'utilisateur a été ajouté avec succès, False sinon.
@@ -97,9 +100,9 @@ class DatabaseManagerbis:
         try:
             password_hash = self.hash_password(password)
             self.conn.execute("""
-                INSERT INTO users (first_name, last_name, username, password_hash, super_user, group_id)
-                VALUES (?, ?, ?, ?, ?, ?);
-            """, (first_name, last_name, username, password_hash, super_user, group_id))
+                INSERT INTO users (first_name, last_name, username, password_hash, super_user)
+                VALUES (?, ?, ?, ?, ?);
+            """, (first_name, last_name, username, password_hash, super_user))
             self.conn.commit()
             return True
         except sqlite3.IntegrityError:
@@ -140,7 +143,7 @@ class DatabaseManagerbis:
         self.conn.commit()
         return cursor.lastrowid
 
-    def add_answer(self, quiz_id: int, question_id: int, selected_option: int, is_correct: bool):
+    def add_answer(self, quiz_id: int, question_id: int, selected_option: int, is_correct: bool, answer_time: float, indice: bool) -> None:
         """
         Ajoute une nouvelle réponse à la table 'answers'.
 
@@ -149,13 +152,50 @@ class DatabaseManagerbis:
             question_id (int): ID de la question.
             selected_option (int): Index de l'option sélectionnée (1-4).
             is_correct (bool): True si la réponse est correcte, False sinon.
+            answer_time (float) : Le temps passé pour répondre à la question
+            indice (bool) : Si un indice a été utilisé (1 pour utilisé sinon 0)
+
 
         """
         self.conn.execute("""
-            INSERT INTO answers (quiz_id, question_id, selected_option, is_correct)
-            VALUES (?, ?, ?, ?, ?);
-        """, (quiz_id, question_id, selected_option, is_correct))
+            INSERT INTO answers (quiz_id, question_id, selected_option, is_correct, answer_time, indice)
+            VALUES (?, ?, ?, ?, ?, ?);
+        """, (quiz_id, question_id, selected_option, is_correct, answer_time, indice))
         self.conn.commit()
+
+    def get_chapters_by_subject(self, subject: str) -> List[str]:
+        cursor = self.conn.execute("""
+            SELECT DISTINCT chapter FROM questions WHERE subject = ?;
+        """, (subject,))
+        return [row[0] for row in cursor.fetchall()]
+    
+    def get_average_answer_time(self, correct: bool = None) -> float:
+            """
+            Calcule le temps moyen de réponse.
+
+            Args:
+                correct (bool, optional): 
+                    - True pour les bonnes réponses,
+                    - False pour les mauvaises réponses,
+                    - None pour toutes les réponses.
+            
+            Returns:
+                float: Temps moyen de réponse en secondes.
+            """
+            if correct is True:
+                condition = "WHERE is_correct = 1"
+            elif correct is False:
+                condition = "WHERE is_correct = 0"
+            else:
+                condition = ""
+            
+            query = f"""
+                SELECT AVG(answer_time) FROM answers
+                {condition};
+            """
+            cursor = self.conn.execute(query)
+            result = cursor.fetchone()[0]
+            return round(result, 2) if result is not None else 0.0
 
     def get_question_by_id(self, question_id: int) -> Dict[str, Any]:
         """
@@ -215,7 +255,7 @@ class DatabaseManagerbis:
             })
         return questions
 
-    def add_question(self, question_text: str, options: List[str], correct_index: int, subject: str, chapter: str) -> int:
+    def add_question(self, question_text: str, options: List[str], correct_index: int, subject: str, chapter: float) -> int:
         """
         Ajoute une nouvelle question à la table 'questions' et retourne son ID.
 
@@ -414,6 +454,53 @@ class DatabaseManagerbis:
             """, (question_id,))
         result_total = cursor_total.fetchone()[0]
         return result_correct / result_total if result_total > 0 else 0.0
+
+    def get_metrics_question(self, question_id: int) -> Dict[str, Any]:
+        """
+        Récupère les statistiques pour une question donnée.
+        
+        Args:
+            question_id (int): ID de la question.
+        
+        Returns:
+            Dict[str, Any]: Dictionnaire contenant le taux de réussite, le nombre d'apparitions, le temps de réponse moyen, le nombre d'indices demandés et la bonne réponse.
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                COUNT(*) as total_attempts,
+                SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
+                AVG(answer_time) as avg_answer_time,
+                SUM(CASE WHEN indice = 1 THEN 1 ELSE 0 END) as total_hints
+            FROM answers
+            WHERE question_id = ?;
+        """, (question_id,))
+        
+        result = cursor.fetchone()
+        total_attempts = result[0]
+        correct_attempts = result[1] if result[1] is not None else 0
+        avg_answer_time = result[2] if result[2] is not None else 0.0
+        total_hints = result[3] if result[3] is not None else 0
+        
+        success_rate = correct_attempts / total_attempts if total_attempts > 0 else 0.0
+        
+        # Récupérer la bonne réponse
+        cursor = self.conn.execute("""
+            SELECT correct_index, option1, option2, option3, option4
+            FROM questions
+            WHERE question_id = ?;
+        """, (question_id,))
+        
+        question_data = cursor.fetchone()
+        correct_index = question_data[0]
+        correct_answer = question_data[correct_index]
+        
+        return {
+            "success_rate": success_rate,
+            "total_attempts": total_attempts,
+            "avg_answer_time": avg_answer_time,
+            "total_hints": total_hints,
+            "correct_answer": correct_answer
+        }
     
     def get_taux_reussite_subject(self, subject: str) -> float:
         """
@@ -618,6 +705,7 @@ class DatabaseManagerbis:
         """)
         return [{"question_text": row[0], "correct_rate": row[1]} for row in cursor.fetchall()]
 
+
     def get_users_data(self) -> List[Dict[str, Any]]:
         cursor = self.conn.execute("""
             SELECT username, COUNT(quizzes.quiz_id) as quiz_count
@@ -627,19 +715,17 @@ class DatabaseManagerbis:
         """)
         return [{"username": row[0], "quiz_count": row[1]} for row in cursor.fetchall()]
 
-    def generate_question(self, topic: str) -> Dict[str, Any]:
-        # Implement question generation logic
-        return {
-            "question_text": "New generated question?",
-            "options": ["Option1", "Option2", "Option3", "Option4"],
-            "correct_index": 1,
-            "explanation": "Explanation of the answer.",
-            "chapter": "Generated Chapter"
-        }
+    def get_usernames(self) -> List[str]:
+        """
+        Récupère la liste des noms d'utilisateurs.
 
-    def get_custom_graph_data(self, x: str, y: str) -> List[Dict[str, Any]]:
-        # Implement custom graph data retrieval based on x and y
-        return []
+        Returns:
+            List[str]: Liste des noms d'utilisateurs.
+        """
+        cursor = self.conn.execute("""
+            SELECT username FROM users WHERE username != 'root';
+        """)
+        return [row[0] for row in cursor.fetchall()]
 
     def get_user_success_rates(self) -> List[Dict[str, Any]]:
         """
@@ -680,54 +766,95 @@ class DatabaseManagerbis:
         ]
 
     
-    # def get_quizz_id_by_topics(self, username: str, topics: str, selected_topics: str) -> int:
-    #     """
-    #     Compte le nombre de quiz réalisés par un utilisateur pour suject/topics donné.
+    def get_users_metrics(self) -> List[Dict[str, Any]]:
+        """
+        Récupère les métriques des utilisateurs.
 
-    #     Args:
-    #         username (str): Nom d'utilisateur.
-    #         topics (str): suject ou chapter.
-    #         selected_topics (str): Nom du topics sélectionné.
-
-    #     Returns:
-    #         int: Nombre de quiz réalisés.
-    #     """
-    #     print(selected_topics)
-    #     cursor = self.conn.execute(f"""
-    #         SELECT COUNT(DISTINCT quizzes.quiz_id)
-    #         FROM quizzes
-    #         JOIN users ON quizzes.user_id = users.user_id
-    #         JOIN answers ON quizzes.quiz_id = answers.quiz_id
-    #         JOIN questions ON answers.question_id = questions.question_id
-    #         WHERE users.username = ? AND questions.{topics} = {selected_topics};
-    #     """, (username, topics))
-    #     count = cursor.fetchone()[0]
-    #     return count
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant les métriques des utilisateurs.
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                users.username,
+                COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
+                AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
+                AVG(answers.answer_time) as avg_answer_time
+            FROM users
+            LEFT JOIN quizzes ON users.user_id = quizzes.user_id
+            LEFT JOIN answers ON quizzes.quiz_id = answers.quiz_id
+            WHERE users.username != 'root'
+            GROUP BY users.user_id;
+        """)
+        return [
+            {
+                "username": row[0],
+                "success_rate": round(row[2], 2) if row[2] is not None else 0.0,
+                "total_quizzes": row[1],
+                "avg_answer_time": round(row[3], 2) if row[3] is not None else 0.0
+            } for row in cursor.fetchall()
+        ]
     
-    # def get_taux_reussite_user_by_topics(self, username: str, topics: str) -> float:
-    #     """
-    #     Calcule le taux de réussite pour un utilisateur dans un chapitre donné.
-
-    #     Args:
-    #         username (str): Nom d'utilisateur.
-    #         topics (str): Nom du chapitre.
-
-    #     Returns:
-    #         float: Taux de réussite (entre 0.0 et 1.0).
-    #     """
-    #     cursor = self.conn.execute(f"""
-    #         SELECT COUNT(*) as total, 
-    #                SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) as correct
-    #         FROM answers
-    #         JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
-    #         JOIN users ON quizzes.user_id = users.user_id
-    #         JOIN questions ON answers.question_id = questions.question_id
-    #         WHERE users.username = ? AND questions.{topics} = ?;
-    #     """, (username, topics))
-    #     result = cursor.fetchone()
-    #     total = result[0]
-    #     correct = result[1] if result[1] is not None else 0
-    #     return correct / total if total > 0 else 0.0
+    def get_users_metrics_by_subject(self, subject: str) -> List[Dict[str, Any]]:
+        """
+        Récupère les métriques des utilisateurs pour un sujet donné.
     
+        Args:
+            subject (str): Le sujet pour lequel récupérer les métriques.
     
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant les métriques des utilisateurs.
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                users.username,
+                COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
+                AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
+                AVG(answers.answer_time) as avg_answer_time
+            FROM users
+            LEFT JOIN quizzes ON users.user_id = quizzes.user_id
+            LEFT JOIN answers ON quizzes.quiz_id = answers.quiz_id
+            LEFT JOIN questions ON answers.question_id = questions.question_id
+            WHERE questions.subject = ? AND users.username != 'root'
+            GROUP BY users.user_id;
+        """, (subject,))
+        return [
+            {
+                "username": row[0],
+                "success_rate": round(row[2], 2) if row[2] is not None else 0.0,
+                "total_quizzes": row[1],
+                "avg_answer_time": round(row[3], 2) if row[3] is not None else 0.0
+            } for row in cursor.fetchall()
+        ]
+    
+    def get_users_metrics_by_chapter(self, chapter: str) -> List[Dict[str, Any]]:
+        """
+        Récupère les métriques des utilisateurs pour un chapitre donné.
+    
+        Args:
+            chapter (str): Le chapitre pour lequel récupérer les métriques.
+    
+        Returns:
+            List[Dict[str, Any]]: Liste de dictionnaires contenant les métriques des utilisateurs.
+        """
+        cursor = self.conn.execute("""
+            SELECT 
+                users.username,
+                COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
+                AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
+                AVG(answers.answer_time) as avg_answer_time
+            FROM users
+            LEFT JOIN quizzes ON users.user_id = quizzes.user_id
+            LEFT JOIN answers ON quizzes.quiz_id = answers.quiz_id
+            LEFT JOIN questions ON answers.question_id = questions.question_id
+            WHERE questions.chapter = ? AND users.username != 'root'
+            GROUP BY users.user_id;
+        """, (chapter,))
+        return [
+            {
+                "username": row[0],
+                "success_rate": round(row[2], 2) if row[2] is not None else 0.0,
+                "total_quizzes": row[1],
+                "avg_answer_time": round(row[3], 2) if row[3] is not None else 0.0
+            } for row in cursor.fetchall()
+        ]
  
