@@ -192,11 +192,11 @@ def main():
 
                 if taux_reussite_temps:
                     df = pd.DataFrame(taux_reussite_temps)
-                    fig = px.line(df, x="Période", y="Taux de Réussite (%)",
+                    fig = px.line(df, x="timestamp", y="success_rate",
                                 title="Évolution du Taux de Réussite dans le temps",
                                 markers=True)
-                    fig.update_layout(xaxis_title="Période",
-                                    yaxis_title="Taux de Réussite (%)",
+                    fig.update_layout(xaxis_title="timestamp",
+                                    yaxis_title="success_rate",
                                     template="plotly_white",
                                     plot_bgcolor='rgba(0,0,0,0)')
                     st.plotly_chart(fig)
@@ -209,13 +209,13 @@ def main():
                 taux_reussite_subject = db.get_taux_reussite_topics_user(user[0], 'subject')
                 if taux_reussite_subject:
                     df_subject = pd.DataFrame(taux_reussite_subject)
-                    fig_subject = px.bar(df_subject.sort_values(by="Taux de Réussite (%)", ascending=True), x="Taux de Réussite (%)", y="Sujet",
+                    fig_subject = px.bar(df_subject.sort_values(by="Taux de Réussite (%)", ascending=True), x="Taux de Réussite (%)", y="subject",
                                         title="Taux de Réussite par Sujet",
                                         color="Taux de Réussite (%)",
                                         color_continuous_scale='Blues', 
                                         orientation='h')
                     fig_subject.update_layout(xaxis_title="Taux de Réussite (%)",
-                                            yaxis_title="Sujet",
+                                            yaxis_title="subject",
                                             template="plotly_white",
                                             xaxis=dict(range=[0, 100], showgrid=True))
                     st.plotly_chart(fig_subject)
@@ -235,11 +235,11 @@ def main():
                     for chapitre in taux_reussite_topics:
                         taux = chapitre["Taux de Réussite (%)"]
                         if taux >= 80:
-                            chapitres_maitrisés.append(chapitre["Sujet"])
+                            chapitres_maitrisés.append(chapitre["subject"])
                         elif 31 <= taux <= 79:
-                            chapitres_en_cours.append(chapitre["Sujet"])
+                            chapitres_en_cours.append(chapitre["subject"])
                         else:
-                            chapitres_a_revoir.append(chapitre["Sujet"])
+                            chapitres_a_revoir.append(chapitre["subject"])
 
                     # Déterminer la longueur maximale des listes
                     max_len = max(len(chapitres_maitrisés), len(chapitres_en_cours), len(chapitres_a_revoir))

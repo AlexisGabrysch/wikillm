@@ -27,7 +27,6 @@ def main():
     db_rag = QuizDatabase()
     rag = RAGPipeline(
         generation_model="mistral-large-latest",
-        db_path="src/db/courses.db",
         max_tokens=900,
         temperature=0.5,
         top_n=1,
@@ -155,22 +154,29 @@ def main():
         """
         Crée et gère un quiz avec toutes les questions de la base de données
         liées au thème (matière+chapitre) sélectionné dans st.session_state.
+        Pour chaque question, le temps de réponse est calculé et le résultat est inséré en BDD.
+        L'explication de la réponse et l'indice (optionnel) sont affichés.
         """
-        st.header("Quiz")
-        # Récupérer le sujet et le chapitre (ou thème) sélectionnés
+        
         selected_subject = st.session_state.get("selected_subject", "")
         selected_course = st.session_state.get("selected_course", "")
-
-        # Charger toutes les questions pour ce sujet et ce chapitre
-        all_questions = db_manager.get_questions_by_subject_and_chapter(subject=selected_subject, chapter=selected_course)
-
+        st.header(f"Quiz - {selected_subject} - {selected_course}")
+        
+        all_questions = db_manager.get_questions_by_subject_and_chapter(
+            subject=selected_subject, chapter=selected_course
+        )
+        
         if not all_questions:
             st.warning("Aucune question disponible pour ce thème.")
+            # Si aucune question n'existe, on peut générer et sauvegarder un quiz
             quizz = rag.generate_quizz_questions(selected_course, nbr_questions=10)
             rag.save_questions(quizz, subject=selected_subject, chapter=selected_course)
             return
 
-        # Initialiser la session de quiz si nécessaire
+        # Récupération (ou création) du quiz en BDD
+        quiz_id = db_manager.get_or_create_quiz(selected_subject, selected_course)
+        
+        # Initialiser l'état du quiz
         if "quiz_data" not in st.session_state:
             st.session_state.quiz_data = all_questions
         if "current_question_index" not in st.session_state:
@@ -193,9 +199,7 @@ def main():
         # Choix du mode quiz
         if not st.session_state.quiz_started:
             mode = st.radio("Choisissez le mode de quiz :", ("speed_test", "chill"))
-            start_quiz_button = st.button("Commencer le quiz")
-            if start_quiz_button:
-                # Réinitialiser l'état du quiz
+            if st.button("Commencer le quiz"):
                 st.session_state.quiz_data = all_questions
                 st.session_state.current_question_index = 0
                 st.session_state.score = 0
@@ -207,9 +211,7 @@ def main():
                 st.session_state.answer_given = False
                 st.session_state.show_hint = False
                 st.session_state.start_time = time.time()
-                # st.rerun()
 
-        # Logique du quiz
         if st.session_state.quiz_started and not st.session_state.completed_quiz:
             # S'il reste des questions
             if st.session_state.current_question_index < len(st.session_state.quiz_data):
@@ -223,10 +225,10 @@ def main():
                 ]
                 correct_index = question_data["correct_index"]
                 correct_option = options[correct_index]
-
-                st.markdown(f"### Question {st.session_state.current_question_index + 1}: {question}")
-
-                # Pour le mode speed_test, on affiche également un timer
+                
+                st.markdown(f"### Question {st.session_state.current_question_index + 1} : {question}")
+                
+                # Pour le mode speed_test, afficher le timer et la barre de progression
                 if st.session_state.mode == "speed_test":
                     elapsed_time = time.time() - st.session_state.start_time
                     remaining_time = 30 - int(elapsed_time)
@@ -234,38 +236,56 @@ def main():
                     progress = min(int((elapsed_time / 30) * 100), 100)
                     st.progress(progress)
                     st_autorefresh(interval=1000, key="timer_refresh")
-
-                    # Si le temps est écoulé, considérer aucune réponse et afficher le résultat
+                    
+                    # Si le temps est écoulé et qu'aucune réponse n'a été donnée
                     if elapsed_time >= 30 and not st.session_state.answer_given:
                         st.session_state.time_spent.append(30)
+                        db_manager.insert_result(
+                            quiz_id=quiz_id,
+                            user_id=st.session_state.user_id,
+                            question_id=question_data["question_id"],
+                            selected_option=None,
+                            is_correct=False,
+                            answer_time=30,
+                            hint_used=False
+                        )
                         st.session_state.answers.append({
                             "question": question,
                             "answer": None,
                             "correct": False,
                             "hint_used": False
                         })
-                        st.session_state.answer_given = True  # Passer en mode affichage du résultat
+                        st.session_state.answer_given = True
 
-                # Affichage des options si l'utilisateur n'a pas encore répondu
+                # Affichage des options si aucune réponse n'a encore été soumise
                 if not st.session_state.answer_given:
                     for i, option in enumerate(options):
                         if st.button(option, key=f"option_{i}"):
                             answer_time = time.time() - st.session_state.start_time
                             st.session_state.time_spent.append(answer_time)
                             correct = (i == correct_index)
+                            if correct:
+                                st.session_state.score += 1
+                            db_manager.insert_result(
+                                quiz_id=quiz_id,
+                                user_id=st.session_state.user_id,
+                                question_id=question_data["question_id"],
+                                selected_option=i + 1,
+                                is_correct=correct,
+                                answer_time=answer_time,
+                                hint_used=st.session_state.show_hint
+                            )
                             st.session_state.answers.append({
                                 "question": question,
                                 "answer": option,
                                 "correct": correct,
-                                "hint_used": False
+                                "hint_used": st.session_state.show_hint
                             })
-                            if correct:
-                                st.session_state.score += 1
                             st.session_state.answer_given = True
                             st.session_state.show_hint = False  # Réinitialiser l'affichage de l'indice
-                            # Ne pas faire de st.rerun() ici pour laisser le temps d'afficher le résultat
+                            
                 else:
-                    # L'utilisateur a répondu, on affiche le résultat, la bonne réponse et l'explication
+                    # L'utilisateur a répondu : affichez résultat, bonne réponse, explication, et indice
                     last_answer = st.session_state.answers[-1]
                     st.markdown(f"**Votre réponse :** {last_answer['answer']}")
                     st.markdown(f"**Bonne réponse :** {correct_option}")
@@ -278,13 +298,10 @@ def main():
                     # Bouton pour afficher/masquer l'indice
                     if st.button("Afficher l'indice", key="hint_button"):
                         st.session_state.show_hint = not st.session_state.show_hint
-                        # Optionnel : marquer que l'indice a été utilisé
                         st.session_state.answers[-1]["hint_used"] = st.session_state.show_hint
-                    
                     if st.session_state.show_hint:
                         st.info(f"**Indice :** {question_data.get('hint', 'Aucun indice disponible.')}")
                     
-                    # Bouton pour passer à la question suivante
                     if st.button("Question suivante", key="next_question"):
                         st.session_state.current_question_index += 1
                         st.session_state.answer_given = False
@@ -292,20 +309,19 @@ def main():
                         st.session_state.start_time = time.time()
                         if st.session_state.current_question_index >= len(st.session_state.quiz_data):
                             st.session_state.completed_quiz = True
-                        # st.rerun()
-
-                # Bouton pour terminer le quiz à tout moment
-                if st.button("Terminer le quiz", key="end_quiz"):
-                    st.session_state.completed_quiz = True
-                    # st.rerun()
-            else:
-                st.session_state.completed_quiz = True
-                # st.rerun()
-
+                            st.session_state.quiz_started = False
+                            st.session_state.time_spent = [round(t, 2) for t in st.session_state.time_spent]
+                            st.session_state.start_time = None
+                            st.session_state.end_time = time.time()
+                            st.session_state.completed_courses.add(selected_course)
+                            st.success("Quiz terminé !")
+                        
+        # In the display_quiz function, update the final recap block to add the completed course if at least 50% correct.
         # Affichage du récapitulatif final si le quiz est terminé
         if st.session_state.completed_quiz:
             st.header("Récapitulatif du Quiz")
-            st.markdown(f"### Score final : {st.session_state.score} / {len(st.session_state.quiz_data)}")
+            total_questions = len(st.session_state.quiz_data)
+            st.markdown(f"### Score final : {st.session_state.score} / {total_questions}")
             st.write("**Détails des questions :**")
             for i, q_data in enumerate(st.session_state.quiz_data):
                 question = q_data["question_text"]
@@ -329,9 +345,17 @@ def main():
                     st.markdown(f"**Explication :** {q_data.get('explanation', 'Aucune explication disponible.')}")
                     if answer.get("hint_used", False):
                         st.info(f"**Indice utilisé :** {q_data.get('hint', 'Aucun indice disponible.')}")
+            
+            # Mise à jour de la table des cours complétés si le score est au moins de 50%
+            if total_questions > 0 and st.session_state.score >= total_questions * 0.5:
+                db_manager.add_completed_course(user_id=st.session_state.user_id, course_title=selected_course)
+                st.success("Félicitations ! Vous avez validé ce chapitre et il a été ajouté à vos cours complétés.")
+            else:
+                st.warning("Vous n'avez pas validé ce chapitre. Réessayez pour obtenir au moins 50% de bonnes réponses.")
+            
             # Réinitialiser l'état pour permettre de refaire un quiz
             st.session_state.quiz_started = False
-            
+                        
             
     def get_elapsed_time():
         return time.time() - st.session_state.start_time
@@ -392,7 +416,6 @@ def main():
             # Création de l'instance du pipeline
             rag_chap = RAGPipeline(
                 generation_model="ministral-8b-latest",
-                db_path="src/db/courses.db",
                 max_tokens=850,
                 temperature=0.7,
                 top_n=1,
