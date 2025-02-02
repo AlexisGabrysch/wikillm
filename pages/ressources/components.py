@@ -127,7 +127,7 @@ def Navbar():
             st.write("**Not logged in**")
 
  
-@st.dialog("🎉 Teste tes connaissances !", width="large")
+@st.dialog("Teste tes connaissances !", width="large")
 def display_quiz(db_manager, rag):
     """
     Crée et gère un quiz avec toutes les questions de la base de données
