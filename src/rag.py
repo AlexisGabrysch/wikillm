@@ -65,8 +65,8 @@ class RAGPipeline:
     def get_price_query(self, model: str, input_tokens: int, output_tokens: int) -> tuple[float, float]:
        
         pricing = {
-            "ministral-8b-latest": {"input": 0.095, "output": 0.095},
-            "mistral-large-latest": {"input": 1.92, "output": 5.75}}
+            "ministral-8b-latest": {"input": 0.09, "output": 0.09},
+            "mistral-large-latest": {"input": 1.8, "output": 5.4}}
         cost_input = (input_tokens / 1_000_000) * pricing[model]["input"]
         cost_output = (output_tokens / 1_000_000) * pricing[model]["output"]
         return cost_input, cost_output
