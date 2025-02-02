@@ -2,6 +2,7 @@ import streamlit as st
 from src.metrics_database import RAGMetricsDatabase
 import time
 from streamlit_autorefresh import st_autorefresh
+from src.db.utils import QuizDatabase
 
 
 # Function to handle user logout
@@ -493,3 +494,85 @@ def display_brevet_results(rag, db_manager):
     
     # Sauvegarder les résultats
     db_manager.save_brevet_result(st.session_state.user_id, results)
+
+@st.dialog("Paramètres Utilisateur", width="medium")
+def user_settings_dialog():
+    st.subheader("Paramètres Utilisateur")
+    current_username = st.session_state.get("username", "User")
+    st.write(f"Pseudo actuel : **{current_username}**")
+    
+    with st.form("change_username_form"):
+        new_username = st.text_input("Nouveau pseudo", placeholder="Entrez le nouveau pseudo")
+        if st.form_submit_button("Changer le pseudo"):
+            db = QuizDatabase()
+            success = db.change_username(current_username, new_username)
+            if success:
+                st.success("Pseudo modifié!")
+                st.session_state.username = new_username
+            else:
+                st.error("Pseudo deja utilisé. Veuillez en choisir un autre.")
+                time.sleep(3)
+            st.rerun()
+            
+    
+    st.markdown("---")
+    
+    with st.form("change_password_form"):
+        old_password = st.text_input("Ancien mot de passe", type="password")
+        new_password = st.text_input("Nouveau mot de passe", type="password")
+        if st.form_submit_button("Changer le mot de passe"):
+            db = QuizDatabase()
+            success = db.change_password(current_username, old_password, new_password)
+            if success:
+                st.success("Mot de passe modifié!")
+            else:
+                st.error("Échec du changement de mot de passe.")
+            st.rerun()
+
+def Navbar():
+    st.markdown(
+        """
+        <style>
+        /* Style pour le bouton utilisateur rond */
+        button[data-baseweb="button"][id="user_settings_btn"] {
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            padding: 0;
+            background-color: #0073e6;
+            color: white;
+            font-weight: bold;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
+    with st.sidebar:
+        # Bouton rond en haut à gauche avec l'initiale de l'utilisateur
+        if st.session_state.get('authenticated'):
+            initial = st.session_state.get("username", "User")[0].upper()
+            if st.button(initial, key="user_settings_btn", help="Paramètres Utilisateur"):
+                user_settings_dialog()
+        
+        st.markdown("## Navigation")
+        st.page_link('app.py', label='Accueil', icon='🏠')
+        st.page_link('pages/admin.py', label='Admin', icon='🔒')
+        st.page_link('pages/brevet.py', label='Brevet Blanc', icon='🎓')
+        st.markdown("---")
+        
+        cols = st.columns(2)
+        with cols[0]:
+            if st.button("About WikiLLM"):
+                project_description_dialog()
+        with cols[1]:
+            if st.button("Metrics Database"):
+                metrics_database_dialog()
+        st.markdown("---")
+        
+        if st.session_state.get('authenticated'):
+            st.write(f"**Logged in as:** {st.session_state.get('username')}")
+            if st.button("Logout"):
+                logout()
+        else:
+            st.write("**Not logged in**")
