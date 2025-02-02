@@ -12,6 +12,23 @@ rag = RAGPipeline(
     )
 db_manager = QuizDatabase()
 def main():
+      # Centralize CSS styling here
+    st.markdown(
+        """
+        <style>
+        div.stButton > button {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .button-row {
+            margin-bottom: 10px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
     Navbar()
 
     # Assurez-vous que l'utilisateur est authentifié

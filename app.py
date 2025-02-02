@@ -12,7 +12,23 @@ st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 def main():
  
     st.title("❔ WikiLLM - Quiz et Cours interactifs 📚 ")
-   
+      # Centralize CSS styling here
+    st.markdown(
+        """
+        <style>
+        div.stButton > button {
+            width: 100%;
+            padding: 10px;
+            font-size: 16px;
+        }
+        .button-row {
+            margin-bottom: 10px;
+        }
+        </style>
+        """,
+        unsafe_allow_html=True
+    )
+    
            
     # Charger les variables d'environnement
     load_dotenv(find_dotenv())
@@ -95,17 +111,18 @@ def main():
         if not categories:
             st.warning("Aucune matière disponible.")
             return
-        cols = st.columns(3)
-        for i, category in enumerate(categories):
-            with cols[i % 3]:
-                total_courses = len(db_rag.get_titles_by_category(category))
-                completed_courses = sum(
-                    1 for course in db_rag.get_titles_by_category(category)
-                    if course in st.session_state.get("completed_courses", set())
-                )
-                if st.button(f"{category} ({completed_courses}/{total_courses})"):
-                    st.session_state.selected_subject = category
-                    st.rerun()
+        with st.container(border=True):
+            cols = st.columns(3)
+            for i, category in enumerate(categories):
+                with cols[i % 3]:
+                    total_courses = len(db_rag.get_titles_by_category(category))
+                    completed_courses = sum(
+                        1 for course in db_rag.get_titles_by_category(category)
+                        if course in st.session_state.get("completed_courses", set())
+                    )
+                    if st.button(f"{category} ({completed_courses}/{total_courses})"):
+                        st.session_state.selected_subject = category
+                        st.rerun()
 
     def display_courses():
         cols = st.columns([5, 1])
