@@ -593,3 +593,5 @@ def Navbar():
                 logout()
         else:
             st.write("**Not logged in**")
+            
+            
