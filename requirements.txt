@@ -1,7 +1,7 @@
 streamlit
 requests
 bs4
-ecologits[litellm,mistralai]==0.5.2
+ecologits
 wikipedia
 litellm==1.55.12
 matplotlib==3.9.2
