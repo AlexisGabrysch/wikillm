@@ -113,10 +113,13 @@ def main():
                     st.rerun()
 
     def display_courses():
-        st.subheader(f"Choisissez un cours dans {st.session_state.selected_subject}")
-        if st.button("Retour", key="back-button"):
-            del st.session_state.selected_subject
-            st.rerun()
+        cols = st.columns([5, 1])
+        with cols[0]:
+            st.subheader(f"Choisissez un cours dans {st.session_state.selected_subject}")
+        with cols[1]:
+            if st.button(icon="↩️", label="Retour"):
+                del st.session_state.selected_subject
+                st.rerun()
         courses = db_courses.get_themes_by_matiere(st.session_state.selected_subject)
         if not courses:
             st.warning("Aucun cours disponible.")
@@ -411,13 +414,16 @@ def main():
         return st.session_state.cached_course_content[course]
     
     def display_course_content():
-        st.subheader(f"Cours : {st.session_state.selected_course}")
+        cols = st.columns([5, 1])
+        with cols[0]:
+            st.subheader(f"Chapitres de {st.session_state.selected_course}")
+        with cols[1]:
 
-        # Bouton retour : vide les informations liées au cours
-        if st.button("Retour", key="back-button" ):
-            if "selected_course" in st.session_state:
-                del st.session_state.selected_course
-            st.rerun()
+            # Bouton retour : vide les informations liées au cours
+            if st.button(icon="↩️", label="Retour"):
+                if "selected_course" in st.session_state:
+                    del st.session_state.selected_course
+                st.rerun()
 
         st.header("Contenu du cours")
         # Chargement du contenu du cours avec cache
