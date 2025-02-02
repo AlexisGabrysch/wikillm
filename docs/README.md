@@ -1,8 +1,7 @@
 # WIKILLM
 
 ## Description
-A brief description of your project.
-
+Yo
 ## Installation
 Instructions on how to install and set up your project.
 
