@@ -140,7 +140,7 @@ Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de 
 
 ## Contact
 
-Pour toute question ou support, contactez les mainteneurs :
+Pour toute question ou support, n'hésitez pas à nous contactez :
 
 - [Alexis GABRYSCH](https://github.com/AlexisGabrysch)
 - [Antoine ORUEZABALA](https://github.com/AntoineORUEZABALA)
