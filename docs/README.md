@@ -1,55 +1,59 @@
 # WikiLLM
 
-WikiLLM is an interactive project that combines quizzes and courses to enhance your learning experience. With WikiLLM, you can test your knowledge through AI-generated quizzes, dive into structured courses, receive detailed explanations and hints, and even simulate real exam scenarios like the Brevet Blanc.
+WikiLLM est un projet interactif qui combine quiz et cours pour améliorer votre expérience d'apprentissage. Avec WikiLLM, vous pouvez tester vos connaissances via des quiz générés par l'IA, explorer des cours structurés, bénéficier d'explications détaillées et d'indices, et même simuler des situations d'examen comme le Brevet Blanc.
 
-## Features
+## Fonctionnalités
 
-- **Interactive Quizzes**: Enjoy dynamically generated quizzes with modes such as speed test and normal. Track answer times, review detailed feedback, and improve your performance.
-- **Detailed Explanations & Hints**: After each question, access in-depth explanations and use hints to better understand the content.
-- **Course Content**: Access comprehensive, structured courses across various subjects.
-- **Brevet Blanc Simulation**: Simulate the French Brevet exam with progress-based quizzes and detailed performance results.
-- **User Metrics**: Monitor your performance with metrics like average answer time, success rates, and more.
-- **Administrative Dashboard**: Administrators can view aggregated data, manage quizzes, and analyze performance trends.
+- **Quiz Interactifs** : Profitez de quiz dynamiques avec différents modes, comme le mode "speed test" ou normal. Suivez le temps de réponse, consultez des retours détaillés et améliorez vos performances.
+- **Explications et Indices** : Après chaque question, accédez à des explications approfondies et utilisez des indices pour mieux comprendre le contenu.
+- **Contenus de Cours** : Accédez à des cours complets et structurés sur divers sujets.
+- **Simulation de Brevet Blanc** : Simulez l'examen du Brevet français avec des quiz progressifs et obtenez des résultats détaillés.
+- **Métriques Utilisateur** : Suivez vos performances grâce à des métriques telles que le temps moyen de réponse, les taux de réussite, etc.
+- **Tableau de Bord Administratif** : Les administrateurs peuvent consulter des données agrégées, gérer les quiz et analyser les tendances de performance.
 
 ## Installation
 
-Ensure you have [Python 3.10](https://www.python.org/downloads/release/python-310/) installed. Then follow these steps to set up your environment:
+Assurez-vous d'avoir [Python 3.10](https://www.python.org/downloads/release/python-310/) installé. Suivez ensuite ces étapes pour installer l'environnement :
 
 ```bash
-# Create a new Conda environment
+# Créez un nouvel environnement Conda
 conda create -n wikillm python==3.10
 
-# Activate the environment
+# Activez l'environnement
 conda activate wikillm
 
-# Navigate to the project directory
+# Accédez au répertoire du projet
 cd wikillm
 
-# Install dependencies
+# Installez les dépendances
 pip install -r requirements.txt
 ```
 
 ## Configuration
 
- Create a `.env` file in the project root and add the necessary environment variables (e.g., your MISTRAL_API_KEY):
+1. Créez un fichier `.env` à la racine du projet et ajoutez les variables d'environnement nécessaires, par exemple :
 
    ```
    MISTRAL_API_KEY=your_mistral_api_key_here
    ```
 
+2. Vous pouvez également ajuster certains paramètres dans le fichier `.streamlit/config.toml` si nécessaire.
 
+## Utilisation
 
-## Usage
-
-To launch the application, run:
+Pour lancer l'application, exécutez :
 
 ```bash
 streamlit run app.py
 ```
 
-This command will start the WikiLLM application. Use the sidebar for navigation between the main dashboard, the admin panel, and the Brevet Blanc simulation.
+Cela lancera l'application WikiLLM. Vous pouvez utiliser la barre latérale pour naviguer entre le tableau de bord principal, le panneau d'administration et la simulation du Brevet Blanc.
 
-## Project Structure
+## Accès en ligne
+
+Vous pouvez également consulter le site en ligne à l'adresse suivante : [https://wikillm.streamlit.app/](https://wikillm.streamlit.app/)
+
+## Structure du projet
 
 ```
 .env
@@ -59,7 +63,6 @@ This command will start the WikiLLM application. Use the sidebar for navigation 
 app.py
 docs/
     README.md
-    memo.txt
 pages/
     admin.py
     brevet.py
@@ -72,32 +75,30 @@ src/
     metrics_database.py
     ml_model.py
     rag.py
-    digischool.ipynb
-    schoolmove.ipynb
     scrapper.py
 ```
 
-- **app.py**: Main application entry point.
-- **pages/**: Contains additional pages such as the admin dashboard and Brevet Blanc.
-- **pages/ressources/components.py**: Contains UI components, dialogs, and navigation elements.
-- **src/**: Core logic including database utilities, metrics, model handling, and data scraping.
-- **docs/**: Documentation and related project files.
+- **app.py** : Point d'entrée principal de l'application.
+- **pages/** : Contient les pages supplémentaires (Dashboard admin, Brevet Blanc, etc.).
+- **pages/ressources/components.py** : Composants UI, dialogues et éléments de navigation.
+- **src/** : Logique principale comprenant les utilitaires de la base de données, la gestion des métriques, le modèle ML et le scrapping des données.
+- **docs/** : Documentation et fichiers associés au projet.
 
-## Contributing
+## Contribution
 
-Contributions are welcome! Please fork the repository and submit a pull request with your improvements or bug fixes. Refer to the [GitHub Flow](https://guides.github.com/introduction/flow/) for branch management guidelines.
+Les contributions sont les bienvenues ! N'hésitez pas à forker le dépôt et à soumettre une pull request avec vos améliorations ou corrections. Consultez le [GitHub Flow](https://guides.github.com/introduction/flow/) pour les directives de gestion des branches.
 
-## License
+## Licence
 
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for further details.
+Ce projet est sous licence MIT. Voir le fichier [LICENSE](LICENSE) pour plus de détails.
 
 ## Contact
 
-For any questions or support, feel free to reach out to the maintainers:
+Pour toute question ou support, contactez les mainteneurs :
 
 - [Alexis GABRYSCH](https://github.com/AlexisGabrysch)
 - [Antoine ORUEZABALA](https://github.com/AntoineORUEZABALA)
 - [Lucile PERBET](https://github.com/lucilecpp)
 - [Alexis DARDELET](https://github.com/AlexisDardelet)
 
-Visit the project repository on [GitHub](https://github.com/AlexisGabrysch/wikillm).
+Consultez le dépôt du projet sur [GitHub](https://github.com/AlexisGabrysch/wikillm).
