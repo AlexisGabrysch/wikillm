@@ -153,7 +153,8 @@ class QuizDatabase:
                 FOREIGN KEY(user_id) REFERENCES users(user_id)
             );
         """)
-              # Ajouter une table pour les résultats du brevet
+
+        # Ajouter une table pour les résultats du brevet
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS brevet_results (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -165,9 +166,30 @@ class QuizDatabase:
                 FOREIGN KEY(user_id) REFERENCES users(user_id)
             );
         """)
+
+        
+        
         # Assuming there exists a users table as described.
         self.conn.commit()
         
+    def count_completed_courses_by_user(self, username: str) -> int:
+        """
+        Compte le nombre de cours complétés par un utilisateur donné.
+
+        Args:
+            username (str): Nom d'utilisateur.
+
+        Returns:
+            int: Nombre de cours complétés.
+        """
+        cursor = self.conn.execute("""
+            SELECT COUNT(completed_courses.course_title) as total_completed_courses
+            FROM users
+            LEFT JOIN completed_courses ON users.user_id = completed_courses.user_id
+            WHERE users.username = ?;
+        """, (username,))
+        result = cursor.fetchone()
+        return result[0] if result else 0
     def insert_super_root(self):
         cursor = self.conn.cursor()
         # Check if 'root' user already exists
@@ -276,35 +298,6 @@ class QuizDatabase:
         """, (quiz_id, user_id, question_id, selected_option, is_correct, answer_time, hint_used))
         self.conn.commit()
 
-    def get_user_results(self, user_id: int) -> List[Dict[str, Any]]:
-        """
-        Returns all quiz results for the given user.
-        """
-        cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT quiz_id, subject, chapter, timestamp, speed_mode
-            FROM quizzes
-            WHERE user_id = ?
-        """, (user_id,))
-        rows = cursor.fetchall()
-        results = []
-        for row in rows:
-            quiz_id = row[0]
-            cursor.execute("""
-                SELECT question_id, selected_option, is_correct, answer_time, indice
-                FROM answers
-                WHERE quiz_id = ?
-            """, (quiz_id,))
-            answers = cursor.fetchall()
-            results.append({
-                "quiz_id": quiz_id,
-                "subject": row[1],
-                "chapter": row[2],
-                "timestamp": row[3],
-                "speed_mode": row[4],
-                "answers": answers
-            })
-        return results
 
     def close(self) -> None:
         self.conn.close()
@@ -487,63 +480,6 @@ class QuizDatabase:
             self.conn.commit()
             return True
         
-    def get_average_success_rate_by_mode(self) -> List[Dict[str, Any]]:
-        """
-        Calcule le taux de réussite moyen pour chaque mode de quizz.
-
-        Returns:
-            List[Dict[str, Any]]: Liste de dictionnaires contenant 'mode' et 'average_success_rate'.
-        """
-        cursor = self.conn.execute("""
-            SELECT 
-                CASE 
-                    WHEN speed_mode = 1 THEN 'Speed' 
-                    ELSE 'Normal' 
-                END as mode,
-                CAST(SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
-                COUNT(answers.answer_id) *100 AS average_success_rate
-            FROM quizzes
-            JOIN answers ON quizzes.quiz_id = answers.quiz_id
-            GROUP BY speed_mode;
-        """)
-        return [
-            {
-                "mode": row[0],
-                "average_success_rate": round(row[1], 2) if row[1] is not None else 0.0
-            } for row in cursor.fetchall()
-        ]
-
-    def get_timestamp(self) -> str:
-        """
-        Retourne les timestamps de chaque quiz.
-
-        Returns:
-            List[str]: Liste des timestamps
-        """
-        cursor = self.conn.execute("""
-            SELECT DISTINCT timestamp FROM quizzes;
-        """)
-        results = cursor.fetchall()
-        return [row[0] for row in results] if results else []
-    
-    def get_quizz_id(self, username: str) -> int:
-        """
-        Compte le nombre de quizz réalisé pour un utilisateur donné.
-
-        Args:
-            username (str): Nom d'utilisateur.
-
-        Returns:
-            int: ID du quizz.
-        """
-
-        cursor = self.conn.execute("""
-            SELECT quiz_id FROM quizzes
-            JOIN users ON quizzes.user_id = users.user_id
-            WHERE users.username = ?;
-        """, (username,))
-        results = cursor.fetchall()
-        return len(results)
     
     def get_taux_reussite_question(self, question_id: int) -> float:
         """
@@ -570,6 +506,17 @@ class QuizDatabase:
             """, (question_id,))
         result_total = cursor_total.fetchone()[0]
         return result_correct / result_total if result_total > 0 else 0.0
+    
+    def clean_database(self):
+        """
+        Supprime tous les enregistrements de la base de données sauf l'utilisateur root.
+        """
+        # Supprimer les enregistrements dans l'ordre correct pour respecter les contraintes de clé étrangère
+        self.conn.execute("DELETE FROM answers;")
+        self.conn.execute("DELETE FROM quizzes;")
+        self.conn.execute("DELETE FROM questions;")
+        self.conn.execute("DELETE FROM users WHERE username != 'root';") # Supprime tout sauf root
+        self.conn.commit()
 
     def get_metrics_question(self, question_id: int) -> Dict[str, Any]:
         """
@@ -586,7 +533,7 @@ class QuizDatabase:
                 COUNT(*) as total_attempts,
                 SUM(CASE WHEN is_correct = 1 THEN 1 ELSE 0 END) as correct_attempts,
                 AVG(answer_time) as avg_answer_time,
-                SUM(CASE WHEN indice = 1 THEN 1 ELSE 0 END) as total_hints
+                SUM(CASE WHEN hint_used = 1 THEN 1 ELSE 0 END) as total_hints
             FROM answers
             WHERE question_id = ?;
         """, (question_id,))
@@ -608,7 +555,7 @@ class QuizDatabase:
         
         question_data = cursor.fetchone()
         correct_index = question_data[0]
-        correct_answer = question_data[correct_index]
+        correct_answer = question_data[correct_index +1]
         
         return {
             "success_rate": success_rate,
@@ -677,6 +624,32 @@ class QuizDatabase:
         result_correct = cursor_correct.fetchone()[0]
         return result_correct / result_total if result_total > 0 else 0.0
 
+    def get_subjects(self) -> List[str]:
+        """
+        Récupère la liste des matières disponibles à partir des questions.
+
+        Returns:
+            List[str]: Liste des sujets uniques.
+        """
+        cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
+        rows = cursor.fetchall()
+        topics = [row[0] for row in rows if row[0]]
+        return topics
+    
+    def get_chapters_by_subject(self, subject: str) -> List[str]:
+        """
+        Réccupère la liste des chapitres pour une matière donnée.
+
+        Args:
+            subject (str): Nom de la matière.
+
+        Returns:
+            List[str]: Liste des chapitres uniques.
+        """
+        cursor = self.conn.execute("""
+            SELECT DISTINCT chapter FROM questions WHERE subject = ?;
+        """, (subject,))
+        return [row[0] for row in cursor.fetchall()]
 
     def get_taux_reussite_user(self, username: str) -> float:
         """
@@ -690,11 +663,11 @@ class QuizDatabase:
         """
         cursor = self.conn.execute("""
             SELECT COUNT(*) as total, 
-                   SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) as correct
-            FROM answers
-            JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
-            JOIN users ON quizzes.user_id = users.user_id
-            WHERE users.username = ?;
+               SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) as correct
+        FROM answers
+        JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
+        JOIN users ON answers.user_id = users.user_id
+        WHERE users.username = ?;
         """, (username,))
         result = cursor.fetchone()
         total = result[0]
@@ -702,34 +675,7 @@ class QuizDatabase:
         return correct / total if total > 0 else 0.0
     
     
-    def get_taux_reussite_user_over_time(self, username: str) -> List[Dict[str, Any]]:
-        """
-        Calcule le taux de réussite au fil du temps pour un utilisateur donné.
 
-        Args:
-            username (str): Nom d'utilisateur.
-
-        Returns:
-            List[Dict[str, Any]]: Liste de dictionnaires contenant 'timestamp' et 'success_rate'.
-        """
-        cursor = self.conn.execute("""
-            SELECT 
-                quizzes.timestamp,
-                CAST(SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
-                COUNT(answers.answer_id) AS success_rate
-            FROM answers
-            JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
-            JOIN users ON answers.user_id = users.user_id
-            WHERE users.username = ?
-            GROUP BY quizzes.timestamp
-            ORDER BY quizzes.timestamp;
-        """, (username,))
-        return [
-            {
-                "timestamp": row[0],
-                "success_rate": round(row[1] * 100, 2)
-            } for row in cursor.fetchall()
-        ]
     
     def get_taux_reussite_topics_user(self, username: str, topics: str ) -> List[Dict[str, Any]]:
         """
@@ -764,37 +710,25 @@ class QuizDatabase:
         
 
     def get_total_users(self) -> int:
-        cursor = self.conn.execute("SELECT COUNT(*) FROM users;")
+        """
+        Récupère le nombre total d'utilisateurs.
+
+        Returns:
+            int: Nombre total d'utilisateurs.
+        """
+        cursor = self.conn.execute("SELECT COUNT(*) FROM users where super_user != 1;")
         return cursor.fetchone()[0]
 
     def get_total_questions(self) -> int:
-        cursor = self.conn.execute("SELECT COUNT(*) FROM questions;")
-        return cursor.fetchone()[0]
-
-    def get_total_quizzes(self) -> int:
-        cursor = self.conn.execute("SELECT COUNT(*) FROM quizzes;")
-        return cursor.fetchone()[0]
-    
-    def get_quiz_count_by_mode(self, mode: int) -> int:
         """
-        Retourne le nombre de quizz selon le mode spécifié.
-
-        Args:
-            mode (int): Le mode du quizz ( 1 pour speed ou 0 pour normal).
+        Réccupère le nombre total de questions.
 
         Returns:
-            int: Nombre de quizz pour le mode spécifié.
+            int: Nombre total de questions.
         """
-        if mode == 1: # 1 pour le mode rapide
-            speed_mode = 1
-        else :
-            speed_mode = 0
-        
-        
-        cursor = self.conn.execute("""
-            SELECT COUNT(*) FROM quizzes WHERE speed_mode = ?;
-        """, (speed_mode,))
+        cursor = self.conn.execute("SELECT COUNT(DISTINCT question_id) FROM answers;")
         return cursor.fetchone()[0]
+    
 
     def get_questions_metrics(self) -> List[Dict[str, Any]]:
         cursor = self.conn.execute("""
@@ -846,26 +780,6 @@ class QuizDatabase:
         """)
         return [{"username": row[0], "success_rate": round(row[1] * 100, 2)} for row in cursor.fetchall()]
 
-    def get_leaderboard(self) -> List[Dict[str, Any]]:
-        cursor = self.conn.execute("""
-            SELECT users.username, COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
-                   CAST(SUM(CASE WHEN answers.is_correct = 1 THEN 1 ELSE 0 END) AS FLOAT) / 
-                   COUNT(answers.answer_id) AS success_rate
-            FROM users
-            JOIN quizzes ON users.user_id = quizzes.user_id
-            JOIN answers ON quizzes.quiz_id = answers.quiz_id
-            GROUP BY users.user_id
-            ORDER BY total_quizzes DESC
-            LIMIT 10;
-        """)
-        return [
-            {
-                "username": row[0],
-                "total_quizzes": row[1],
-                "success_rate": round(row[2] * 100, 2)
-            } for row in cursor.fetchall()
-        ]
-
  
     def get_users_metrics(self) -> List[Dict[str, Any]]:
         """
@@ -876,15 +790,14 @@ class QuizDatabase:
         """
         cursor = self.conn.execute("""
             SELECT 
-                users.username,
-                COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
-                AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
-                AVG(answers.answer_time) as avg_answer_time
-            FROM users
-            LEFT JOIN quizzes ON users.user_id = quizzes.user_id
-            LEFT JOIN answers ON quizzes.quiz_id = answers.quiz_id
-            WHERE users.username != 'root'
-            GROUP BY users.user_id;
+            users.username,
+            COUNT(DISTINCT answers.quiz_id) as total_quizzes,
+            AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
+            AVG(answers.answer_time) as avg_answer_time
+        FROM users
+        LEFT JOIN answers ON users.user_id = answers.user_id
+        WHERE users.super_user != '1'
+        GROUP BY users.username;
         """)
         return [
             {
@@ -907,16 +820,15 @@ class QuizDatabase:
         """
         cursor = self.conn.execute("""
             SELECT 
-                users.username,
-                COUNT(DISTINCT quizzes.quiz_id) as total_quizzes,
-                AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
-                AVG(answers.answer_time) as avg_answer_time
-            FROM users
-            LEFT JOIN quizzes ON users.user_id = quizzes.user_id
-            LEFT JOIN answers ON quizzes.quiz_id = answers.quiz_id
-            LEFT JOIN questions ON answers.question_id = questions.question_id
-            WHERE questions.subject = ? AND users.username != 'root'
-            GROUP BY users.user_id;
+            users.username,
+            COUNT(DISTINCT answers.quiz_id) as total_quizzes,
+            AVG(CASE WHEN answers.is_correct = 1 THEN 1.0 ELSE 0.0 END) * 100 as success_rate,
+            AVG(answers.answer_time) as avg_answer_time
+        FROM users
+        LEFT JOIN answers ON users.user_id = answers.user_id
+        LEFT JOIN questions ON answers.question_id = questions.question_id
+        WHERE questions.subject = ? AND users.super_user != '1'
+        GROUP BY users.username;
         """, (subject,))
         return [
             {
@@ -946,7 +858,7 @@ class QuizDatabase:
             LEFT JOIN answers ON users.user_id = answers.user_id
             LEFT JOIN quizzes ON answers.quiz_id = quizzes.quiz_id
             LEFT JOIN questions ON answers.question_id = questions.question_id
-            WHERE questions.chapter = ? AND users.username != 'root'
+            WHERE questions.chapter = ? AND users.super_user != '1'
             GROUP BY users.user_id;
         """, (chapter,))
         return [
@@ -1056,29 +968,29 @@ class QuizDatabase:
         return cursor.fetchone()[0] == 1
     
     def get_all_questions_by_subject(self, subject: str) -> List[Dict[str, Any]]:
-        """
-        Récupère toutes les questions pour une matière donnée.
-        """
-        cursor = self.conn.execute("""
-            SELECT question_id, question_text, option1, option2, option3, option4, 
-                   correct_index, chapter, hint, explanation
-            FROM questions
-            WHERE subject = ?;
-        """, (subject,))
-        
-        questions = []
-        for row in cursor.fetchall():
-            questions.append({
-                "question_id": row[0],
-                "question_text": row[1],
-                "options": [row[2], row[3], row[4], row[5]],
-                "correct_index": row[6],
-                "chapter": row[7],
-                "hint": row[8],
-                "explanation": row[9]
-            })
-        return questions
-    
+            """
+            Récupère toutes les questions pour une matière donnée.
+            """
+            cursor = self.conn.execute("""
+                SELECT question_id, question_text, option1, option2, option3, option4, 
+                    correct_index, chapter, hint, explanation
+                FROM questions
+                WHERE subject = ?;
+            """, (subject,))
+            
+            questions = []
+            for row in cursor.fetchall():
+                questions.append({
+                    "question_id": row[0],
+                    "question_text": row[1],
+                    "options": [row[2], row[3], row[4], row[5]],
+                    "correct_index": row[6],
+                    "chapter": row[7],
+                    "hint": row[8],
+                    "explanation": row[9]
+                })
+            return questions
+
     def save_brevet_result(self, user_id: int, results: Dict[str, Dict[str, Any]]) -> None:
         """Sauvegarde les résultats du brevet blanc."""
         for subject, data in results.items():
