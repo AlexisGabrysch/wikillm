@@ -7,7 +7,6 @@ import os
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-from src.metrics_database import RAGMetricsDatabase
 def main():
     Navbar()
 
@@ -17,7 +16,7 @@ def main():
         return
 
     db = QuizDatabase()
-    rag_metrics_db = RAGMetricsDatabase()
+   
     username = st.session_state.get('username')
     super_user = db.get_super_user(username)
 

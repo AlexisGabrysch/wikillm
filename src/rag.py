@@ -3,6 +3,8 @@ from typing import Any, List, Dict
 from dotenv import load_dotenv, find_dotenv
 import litellm  
 from .metrics_database import RAGMetricsDatabase
+from .ml_model import generate_recommendations, get_thresholds
+
 
 import re
 import numpy as np
@@ -50,6 +52,7 @@ class RAGPipeline:
         EcoLogits.init(providers="litellm", electricity_mix_zone="FRA")
         self.metrics_db = RAGMetricsDatabase()
         self.quizdb = db_utils.QuizDatabase()
+        self.coursesdb = db_utils.CoursesDatabase()
 
   
 
@@ -208,7 +211,6 @@ class RAGPipeline:
         prompt = self.build_prompt( context_course=[txt], topic=chapitre, role="summary")
         response = self.generate(prompt)
         metrics = self.metrics(response)
-        print(metrics)
         self.metrics_db.insert_metric(
             input_tokens=metrics["prompt_tokens"],
             output_tokens=metrics["completion_tokens"],
@@ -242,7 +244,6 @@ class RAGPipeline:
             )
             response = self.generate(prompt=prompt)
             metrics = self.metrics(response)
-            print(metrics)
             self.metrics_db.insert_metric(
                 input_tokens=metrics["prompt_tokens"],
                 output_tokens=metrics["completion_tokens"],
@@ -355,8 +356,94 @@ class RAGPipeline:
                 )
         print(f'Questions {chapter}  enregistrées dans la base de données.')
             
+##############################################################################
+
+
+
+    def fetch_subjects(self) -> List[str]:
+        """Récupère la liste des matières pour lesquelles générer un quiz."""
+        self.subjects = self.coursesdb.get_matiere()
+        return self.subjects
     
-    
+    def generate_brevet_quiz(self) -> Dict[str, List[Dict[str, Any]]]:
+        """Génère un quiz type brevet avec exactement 20 questions par matière."""
+        brevet_quiz = {}
+        self.fetch_subjects()
+        for subject in self.subjects:
+            print(f"Generating questions for {subject}...")
+            questions = self.quizdb.get_all_questions_by_subject(subject)
+            print(f"Found {len(questions) if questions else 0} existing questions for {subject}")
+            
+            brevet_quiz[subject] = []
+            
+            # Si nous avons plus de 20 questions, en sélectionner 20 aléatoirement
+            if questions and len(questions) >= 20:
+                selected_questions = list(np.random.choice(questions, size=20, replace=False))
+                brevet_quiz[subject] = selected_questions
+                print(f"Selected 20 random questions from {len(questions)} existing questions for {subject}")
+            else:
+                # Ajouter toutes les questions existantes
+                existing_count = len(questions) if questions else 0
+                if existing_count > 0:
+                    brevet_quiz[subject].extend(questions)
+                    print(f"Added {existing_count} existing questions for {subject}")
+                
+                # Générer les questions manquantes
+                remaining = 20 - len(brevet_quiz[subject])
+                print(f"Need to generate {remaining} new questions for {subject}")
+                
+                while len(brevet_quiz[subject]) < 20:
+                    # Obtenir un chapitre aléatoire pour la matière
+                    topic = self.quizdb.get_random_topic_by_subject(subject)
+                    if not topic:
+                        print(f"No topics found for {subject}")
+                        break
+                    
+                    print(f"Generating questions for topic: {topic}")
+                    new_questions = self.generate_quizz_questions(topic, nbr_questions=min(5, 20 - len(brevet_quiz[subject])))
+                    
+                    if new_questions:
+                        # Ajouter les nouvelles questions
+                        brevet_quiz[subject].extend(new_questions)
+                        # Sauvegarder les nouvelles questions
+                        # self.save_questions(new_questions, subject=subject, chapter=topic)
+                        print(f"Generated {len(new_questions)} new questions for {subject}")
+            
+            # Vérification finale
+            if len(brevet_quiz[subject]) != 20:
+                print(f"Warning: Could only generate {len(brevet_quiz[subject])} questions for {subject} instead of 20")
+            else:
+                print(f"Successfully generated 20 questions for {subject}")
+        
+        return brevet_quiz
+
+    def evaluate_brevet_performance(self, results: Dict[str, List[Dict[str, bool]]]) -> Dict[str, str]:
+        """
+        Évalue les performances du brevet et classifie l'élève par matière.
+        """
+        classifications = {}
+        level_thresholds = get_thresholds()
+        for subject, answers in results.items():
+            correct_answers = sum(1 for a in answers if a["correct"])
+            if correct_answers <= level_thresholds["bad"]:
+                level = "bad"
+            elif correct_answers >= level_thresholds["neutral"]:
+                level = "good"
+            else:
+                level = "neutral"
+            classifications[subject] = level
+        return classifications
+
+    def get_brevet_recommendations(self, classifications: Dict[str, str]) -> Dict[str, List[str]]:
+        """
+        Génère des recommandations personnalisées basées sur les résultats du brevet.
+        """
+        recommendations = {}
+        recommendation = generate_recommendations(classifications)
+        recommendations["global"] = [recommendation]
+        return recommendations
+
+
 
 if __name__ == "__main__":
     pipeline = RAGPipeline(

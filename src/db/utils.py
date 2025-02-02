@@ -153,7 +153,18 @@ class QuizDatabase:
                 FOREIGN KEY(user_id) REFERENCES users(user_id)
             );
         """)
-        
+              # Ajouter une table pour les résultats du brevet
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS brevet_results (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                user_id INTEGER,
+                subject TEXT,
+                score INTEGER,
+                level TEXT,
+                timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+                FOREIGN KEY(user_id) REFERENCES users(user_id)
+            );
+        """)
         # Assuming there exists a users table as described.
         self.conn.commit()
         
@@ -1043,3 +1054,36 @@ class QuizDatabase:
             SELECT super_user FROM users WHERE username = ?;
         """, (username,))
         return cursor.fetchone()[0] == 1
+    
+    def get_all_questions_by_subject(self, subject: str) -> List[Dict[str, Any]]:
+        """
+        Récupère toutes les questions pour une matière donnée.
+        """
+        cursor = self.conn.execute("""
+            SELECT question_id, question_text, option1, option2, option3, option4, 
+                   correct_index, chapter, hint, explanation
+            FROM questions
+            WHERE subject = ?;
+        """, (subject,))
+        
+        questions = []
+        for row in cursor.fetchall():
+            questions.append({
+                "question_id": row[0],
+                "question_text": row[1],
+                "options": [row[2], row[3], row[4], row[5]],
+                "correct_index": row[6],
+                "chapter": row[7],
+                "hint": row[8],
+                "explanation": row[9]
+            })
+        return questions
+    
+    def save_brevet_result(self, user_id: int, results: Dict[str, Dict[str, Any]]) -> None:
+        """Sauvegarde les résultats du brevet blanc."""
+        for subject, data in results.items():
+            self.conn.execute("""
+                INSERT INTO brevet_results (user_id, subject, score, level)
+                VALUES (?, ?, ?, ?);
+            """, (user_id, subject, data["score"], data["level"]))
+        self.conn.commit()
