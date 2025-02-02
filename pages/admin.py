@@ -9,7 +9,22 @@ import plotly.express as px
 import pandas as pd
 def main():
     Navbar()
-
+    st.markdown(
+            """
+            <style>
+            div.stButton > button {
+                width: 100%;
+                padding: 10px;
+                font-size: 16px;
+            }
+            .button-row {
+                margin-bottom: 10px;
+            }
+            </style>
+            """,
+            unsafe_allow_html=True
+        )
+    
     # Assurez-vous que l'utilisateur est authentifié
     if not st.session_state.get('authenticated'):
         st.warning("You must be logged in to access the admin dashboard.")
