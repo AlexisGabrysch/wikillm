@@ -13,6 +13,4 @@ scikit-learn==1.5.2
 sentence-transformers
 streamlit_autorefresh
 rapidfuzz
-fastapi
-websockets
-qrcode
+
