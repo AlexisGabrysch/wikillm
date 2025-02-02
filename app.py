@@ -1,18 +1,19 @@
 import streamlit as st
-from pages.ressources.components import Navbar, logout
+from pages.ressources.components import Navbar
 from src.db.utils import QuizDatabase ,CoursesDatabase
-
 from src.rag import RAGPipeline
 from dotenv import find_dotenv, load_dotenv
 import os
-
 import time
 from streamlit_autorefresh import st_autorefresh
-
 
 st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 
 def main():
+ 
+    st.title("❔ WikiLLM - Quiz et Cours interactifs 📚 ")
+   
+           
     # Charger les variables d'environnement
     load_dotenv(find_dotenv())
     API_KEY = os.getenv("MISTRAL_API_KEY")
@@ -32,26 +33,12 @@ def main():
         top_n=1,
     )
 
-    st.markdown(
-        """
-        <style>
-        div.stButton > button {
-            width: 100%;
-            padding: 10px;
-            font-size: 16px;
-        }
-        .button-row {
-            margin-bottom: 10px;
-        }
-        </style>
-        """,
-        unsafe_allow_html=True
-    )
+   
+
 
     # Barre de navigation
     Navbar()
 
-    st.title("❔ WikiLLM - Quiz et Cours interactifs 📚 ")
 
     # Initialize session state for authentication and completed courses
     if "authenticated" not in st.session_state:
@@ -108,7 +95,7 @@ def main():
                     st.error("Username already exists. Please choose a different one.")
 
     def display_subjects():
-        st.title("Choisissez une matière")
+        st.subheader(f'Votre progression, {st.session_state.username}')
         categories = db_courses.get_matiere()
         if not categories:
             st.warning("Aucune matière disponible.")
@@ -126,17 +113,17 @@ def main():
                     st.rerun()
 
     def display_courses():
-        st.title(f"Choisissez un cours dans {st.session_state.selected_subject}")
-        if st.button("Retour"):
+        st.subheader(f"Choisissez un cours dans {st.session_state.selected_subject}")
+        if st.button("Retour", key="back-button"):
             del st.session_state.selected_subject
             st.rerun()
         courses = db_courses.get_themes_by_matiere(st.session_state.selected_subject)
         if not courses:
             st.warning("Aucun cours disponible.")
             return
-        cols = st.columns(3)
+        cols = st.columns(2)
         for i, course in enumerate(courses):
-            with cols[i % 3]:
+            with cols[i % 2]:
                 if st.button(course):
                     st.session_state.selected_course = course
                     # Reset quiz-related session state variables
@@ -259,6 +246,8 @@ def main():
 
                 # Affichage des options si aucune réponse n'a encore été soumise
                 if not st.session_state.answer_given:
+                    st_autorefresh(interval=100, key="timer_refresh_activation")
+
                     for i, option in enumerate(options):
                         if st.button(option, key=f"option_{i}"):
                             answer_time = time.time() - st.session_state.start_time
@@ -283,8 +272,14 @@ def main():
                             })
                             st.session_state.answer_given = True
                             st.session_state.show_hint = False  # Réinitialiser l'affichage de l'indice
-                            
+                            # Bouton pour afficher/masquer l'indice
+                    if st.button("Afficher l'indice", key=f'button_hint_{i}'):
+                        st.session_state.show_hint = not st.session_state.show_hint
+                        st.session_state.answers[-1]["hint_used"] = st.session_state.show_hint
+                    if st.session_state.show_hint:
+                        st.info(f"**Indice :** {question_data.get('hint', 'Aucun indice disponible.')}")
                 else:
+                    st_autorefresh(interval=100, key="timer_refresh_reactivation")
                     # L'utilisateur a répondu : affichez résultat, bonne réponse, explication, et indice
                     last_answer = st.session_state.answers[-1]
                     st.markdown(f"**Votre réponse :** {last_answer['answer']}")
@@ -295,12 +290,7 @@ def main():
                         st.error("Mauvaise réponse.")
                     st.markdown(f"**Explication :** {question_data.get('explanation', 'Aucune explication disponible.')}")
                     
-                    # Bouton pour afficher/masquer l'indice
-                    if st.button("Afficher l'indice", key="hint_button"):
-                        st.session_state.show_hint = not st.session_state.show_hint
-                        st.session_state.answers[-1]["hint_used"] = st.session_state.show_hint
-                    if st.session_state.show_hint:
-                        st.info(f"**Indice :** {question_data.get('hint', 'Aucun indice disponible.')}")
+                    
                     
                     if st.button("Question suivante", key="next_question"):
                         st.session_state.current_question_index += 1
@@ -403,7 +393,7 @@ def main():
         st.subheader(f"Cours : {st.session_state.selected_course}")
 
         # Bouton retour : vide les informations liées au cours
-        if st.button("Retour"):
+        if st.button("Retour", key="back-button" ):
             if "selected_course" in st.session_state:
                 del st.session_state.selected_course
             st.rerun()
