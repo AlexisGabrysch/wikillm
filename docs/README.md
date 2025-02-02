@@ -1,9 +1,11 @@
 # WikiLLM 📚
 
 
-WikiLLM est un projet interactif qui combine quiz et cours pour améliorer votre expérience d'apprentissage. Basé sur le programme officiel, WikiLLM vous permet de tester vos connaissances à l'aide de quiz générés par l'IA, d'explorer des cours structurés en Histoire, Physique-Chimie et Sciences de la Vie et de la Terre (SVT). Chaque contenu est conçu pour suivre les attentes académiques, avec des explications détaillées et des indices pour renforcer votre compréhension. De plus, vous pouvez vous entraîner dans des conditions d'examen réelles grâce à des simulations comme le Brevet Blanc, afin de mieux vous préparer aux évaluations officielles.
+WikiLLM est un projet interactif qui combine quiz et cours pour améliorer votre expérience d'apprentissage. Basé sur le programme officiel, cette application vous permet de tester vos connaissances à l'aide de quiz générés par l'IA, d'explorer des cours structurés en Histoire, Physique-Chimie et Sciences de la Vie et de la Terre (SVT). Chaque contenu est conçu pour suivre les attentes académiques, avec des explications détaillées et des indices pour renforcer votre compréhension. 
 
-Les questions des quiz sont générées par l'API Mistral en utilisant des données scrappées de [School Move](https://www.schoolmouv.fr/). Cela permet de garantir que les questions sont pertinentes et alignées avec les programmes académiques.
+De plus, vous pouvez vous entraîner dans des conditions d'examen réelles grâce à des simulations comme le Brevet Blanc, afin de mieux vous préparer aux évaluations officielles.
+
+Les questions des quiz sont générées par l'API Mistral en utilisant des données scrappées de [School Move](https://www.schoolmouv.fr/). Cela permet de garantir que les questions sont alignées avec les programmes académiques.
 
 ## Table des Matières
 - [Fonctionnalités](#fonctionnalités)
