@@ -1,15 +1,33 @@
-# WikiLLM
+# WikiLLM 📚
 
-WikiLLM est un projet interactif qui combine quiz et cours pour améliorer votre expérience d'apprentissage. Avec WikiLLM, vous pouvez tester vos connaissances via des quiz générés par l'IA, explorer des cours structurés, bénéficier d'explications détaillées et d'indices, et même simuler des situations d'examen comme le Brevet Blanc.
+
+WikiLLM est un projet interactif qui combine quiz et cours pour améliorer votre expérience d'apprentissage. Basé sur le programme officiel, cette application vous permet de tester vos connaissances à l'aide de quiz générés par l'IA, d'explorer des cours structurés en Histoire, Physique-Chimie et Sciences de la Vie et de la Terre (SVT). Chaque contenu est conçu pour suivre les attentes académiques, avec des explications détaillées et des indices pour renforcer votre compréhension. 
+
+De plus, vous pouvez vous entraîner dans des conditions d'examen réelles grâce à des simulations comme le Brevet Blanc, afin de mieux vous préparer aux évaluations officielles.
+
+Les questions des quiz sont générées par l'API Mistral en utilisant des données scrappées de [School Move](https://www.schoolmouv.fr/). Cela permet de garantir que les questions sont alignées avec les programmes académiques.
+
+## Table des Matières
+- [Fonctionnalités](#fonctionnalités)
+- [Installation](#installation)
+- [Configuration](#configuration)
+- [Utilisation](#utilisation)
+- [Accès en ligne](#accès-en-ligne)
+- [Technologie utilisées](#technologie-utilisées)
+- [Architecture du projet](#architecture-du-projet)
+- [Contribution](#contribution)
+- [Licence](#licence)
+- [Contact](#contact)
 
 ## Fonctionnalités
 
-- **Quiz Interactifs** : Profitez de quiz dynamiques avec différents modes, comme le mode "speed test" ou normal. Suivez le temps de réponse, consultez des retours détaillés et améliorez vos performances.
-- **Explications et Indices** : Après chaque question, accédez à des explications approfondies et utilisez des indices pour mieux comprendre le contenu.
-- **Contenus de Cours** : Accédez à des cours complets et structurés sur divers sujets.
-- **Simulation de Brevet Blanc** : Simulez l'examen du Brevet français avec des quiz progressifs et obtenez des résultats détaillés.
-- **Métriques Utilisateur** : Suivez vos performances grâce à des métriques telles que le temps moyen de réponse, les taux de réussite, etc.
-- **Tableau de Bord Administratif** : Les administrateurs peuvent consulter des données agrégées, gérer les quiz et analyser les tendances de performance.
+- **Quiz Interactifs** 📝 : Profitez de quiz dynamiques avec différents modes, comme le mode "speed test" ou normal. Suivez le temps de réponse, consultez des retours détaillés et améliorez vos performances.
+- **Explications et Indices** 💡 : Après chaque question, accédez à des explications approfondies et utilisez des indices pour mieux comprendre le contenu.
+- **Contenus de Cours** 📖 : Accédez à des cours complets et structurés sur divers sujets.
+- **Simulation de Brevet Blanc** 🎓 : Simulez l'examen du Brevet avec des quiz progressifs et obtenez des résultats détaillés.
+- **Métriques Utilisateur** 📊 : Suivez vos performances grâce à des métriques telles que le temps moyen de réponse, les taux de réussite, etc.
+- **Tableau de Bord Administratif** 🛠️ : Les administrateurs peuvent consulter des données agrégées, gérer les quiz et analyser les tendances de performance.
+
 
 ## Installation
 
@@ -31,7 +49,8 @@ pip install -r requirements.txt
 
 ## Configuration
 
-1. Créez un fichier `.env` à la racine du projet et ajoutez les variables d'environnement nécessaires, par exemple :
+
+1. Créez un fichier `.env` à la racine du projet et ajoutez la variable d'environnement [Mistral](https://console.mistral.ai/) :
 
    ```
    MISTRAL_API_KEY=your_mistral_api_key_here
@@ -53,7 +72,15 @@ Cela lancera l'application WikiLLM. Vous pouvez utiliser la barre latérale pour
 
 Vous pouvez également consulter le site en ligne à l'adresse suivante : [https://wikillm.streamlit.app/](https://wikillm.streamlit.app/)
 
-## Structure du projet
+## Technologie utilisées
+
+- **Python** 🐍 : Langage principal utilisé pour le développement.
+- **Streamlit** 📊 : Framework utilisé pour créer l'application web interactive.
+- **Mistral** 🌐 : API utilisée pour certaines fonctionnalités de l'application.
+- **Conda** 📦 : Gestionnaire d'environnements pour gérer les dépendances.
+
+
+## Architecture du projet
 
 ```
 .env
@@ -86,7 +113,26 @@ src/
 
 ## Contribution
 
-Les contributions sont les bienvenues ! N'hésitez pas à forker le dépôt et à soumettre une pull request avec vos améliorations ou corrections. Consultez le [GitHub Flow](https://guides.github.com/introduction/flow/) pour les directives de gestion des branches.
+Les contributions sont les bienvenues ! Pour participez suivez ces étapes : 
+
+1. Forkez le repo
+
+2. Créez votre branche
+```
+git checkout -b feature/AmazingFeature
+```
+3. Commit vos changements
+```
+git commit -m 'Add some AmazingFeature'
+```
+4. Push dans la branch
+```
+git push origin feature/AmazingFeature
+```
+
+5. Ouvrez une Pull Request
+
+Consultez le [GitHub Flow](https://guides.github.com/introduction/flow/) pour les directives de gestion des branches.
 
 ## Licence
 
