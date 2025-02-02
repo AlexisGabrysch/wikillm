@@ -25,14 +25,7 @@ def main():
     if super_user == 1:
 
         st.header("Super User Dashboard")
-        # affichage des métriques
-        st.subheader("Metrics Overview")
-        metrics = rag_metrics_db.get_all_metrics()
-        if metrics:
-            df_metrics = pd.DataFrame(metrics)
-            st.dataframe(df_metrics)
-        else:
-            st.warning("No metrics available at the moment.")
+
             
         # Metrique 
         st.subheader("Vue globale des métriques")
@@ -414,15 +407,7 @@ def main():
     else : 
         st.title(f"Tableau de bords de {username}")
         st.header("Super User Dashboard")
-        # affichage des métriques
-        st.subheader("Metrics Overview")
-        metrics = rag_metrics_db.get_all_metrics()
-        print(metrics)
-        if metrics:
-            df_metrics = pd.DataFrame(metrics)
-            st.dataframe(df_metrics)
-        else:
-            st.warning("No metrics available at the moment.")
+ 
         users = db.conn.execute(
             "SELECT username FROM users WHERE username = ?;",
             (username,)).fetchall()

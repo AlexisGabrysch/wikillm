@@ -64,15 +64,22 @@ class RAGMetricsDatabase:
         cursor.execute("""
             SELECT 
                 AVG(latency) AS avg_latency,
-                AVG(price_input) AS avg_price_input,
-                AVG(price_output) AS avg_price_output
+                SUM(price_input) AS price_input_total,
+                SUM(price_output) AS price_output_total,
+                SUM(price_input) + SUM(price_output) AS price_total,
+                SUM(gwp) AS gwp_total,
+                SUM(energy_usage) AS energy_usage_total
             FROM rag_metrics
         """)
         row = cursor.fetchone()
         return {
             "avg_latency": row[0],
-            "avg_price_input": row[1],
-            "avg_price_output": row[2]
+            "price_input_total": row[1],
+            "price_output_total": row[2],
+            "price_total": row[3],
+            "gwp_total": row[4],
+            "energy_usage_total": row[5]
+            
         }
 
     def close(self) -> None:
