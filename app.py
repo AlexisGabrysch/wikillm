@@ -214,11 +214,14 @@ def main():
                 correct_option = options[correct_index]
                 
                 st.markdown(f"### Question {st.session_state.current_question_index + 1} : {question}")
-                
+                                # Initialisation du timer
+                if "timer_active" not in st.session_state:
+                    st.session_state.timer_active = True
+
                 # Pour le mode speed_test, afficher le timer et la barre de progression
-                if st.session_state.mode == "speed_test":
+                if st.session_state.mode == "speed_test" and st.session_state.timer_active:
                     elapsed_time = time.time() - st.session_state.start_time
-                    remaining_time = 30 - int(elapsed_time)
+                    remaining_time = max(30 - int(elapsed_time), 0)
                     st.markdown(f"### Temps restant : {remaining_time} secondes")
                     progress = min(int((elapsed_time / 30) * 100), 100)
                     st.progress(progress)
@@ -226,6 +229,7 @@ def main():
                     
                     # Si le temps est écoulé et qu'aucune réponse n'a été donnée
                     if elapsed_time >= 30 and not st.session_state.answer_given:
+                        
                         st.session_state.time_spent.append(30)
                         db_manager.insert_result(
                             quiz_id=quiz_id,
@@ -243,13 +247,15 @@ def main():
                             "hint_used": False
                         })
                         st.session_state.answer_given = True
-
+                        
+                
                 # Affichage des options si aucune réponse n'a encore été soumise
                 if not st.session_state.answer_given:
-                    st_autorefresh(interval=100, key="timer_refresh_activation")
+                    st_autorefresh(interval=20, key="timer_refresh_activation")
 
                     for i, option in enumerate(options):
                         if st.button(option, key=f"option_{i}"):
+                            st.session_state.timer_active = False  # Arrêter le timer
                             answer_time = time.time() - st.session_state.start_time
                             st.session_state.time_spent.append(answer_time)
                             correct = (i == correct_index)
@@ -273,13 +279,16 @@ def main():
                             st.session_state.answer_given = True
                             st.session_state.show_hint = False  # Réinitialiser l'affichage de l'indice
                             # Bouton pour afficher/masquer l'indice
-                    if st.button("Afficher l'indice", key=f'button_hint_{i}'):
+                    if st.button("Afficher l'indice"):
                         st.session_state.show_hint = not st.session_state.show_hint
-                        st.session_state.answers[-1]["hint_used"] = st.session_state.show_hint
+                        if st.session_state.answers:
+                            st.session_state.answers[0]["hint_used"] = st.session_state.show_hint
+
+                        
                     if st.session_state.show_hint:
                         st.info(f"**Indice :** {question_data.get('hint', 'Aucun indice disponible.')}")
                 else:
-                    st_autorefresh(interval=100, key="timer_refresh_reactivation")
+                    st_autorefresh(interval=20, key="timer_refresh_reactivation")
                     # L'utilisateur a répondu : affichez résultat, bonne réponse, explication, et indice
                     last_answer = st.session_state.answers[-1]
                     st.markdown(f"**Votre réponse :** {last_answer['answer']}")
@@ -288,15 +297,16 @@ def main():
                         st.success("Bonne réponse !")
                     else:
                         st.error("Mauvaise réponse.")
-                    st.markdown(f"**Explication :** {question_data.get('explanation', 'Aucune explication disponible.')}")
+                    with st.container(border=True):
+                        st.markdown(f"{question_data.get('explanation', 'Aucune explication disponible.')}")                    
                     
-                    
-                    
+                  
                     if st.button("Question suivante", key="next_question"):
                         st.session_state.current_question_index += 1
                         st.session_state.answer_given = False
                         st.session_state.show_hint = False
                         st.session_state.start_time = time.time()
+                        st.session_state.timer_active = True
                         if st.session_state.current_question_index >= len(st.session_state.quiz_data):
                             st.session_state.completed_quiz = True
                             st.session_state.quiz_started = False
@@ -305,6 +315,15 @@ def main():
                             st.session_state.end_time = time.time()
                             st.session_state.completed_courses.add(selected_course)
                             st.success("Quiz terminé !")
+                            
+                    if st.button("Terminer le quiz", key="finish_quiz"):
+                        st.session_state.completed_quiz = True
+                        st.session_state.quiz_started = False
+                        st.session_state.time_spent = [round(t, 2) for t in st.session_state.time_spent]
+                        st.session_state.start_time = None
+                        st.session_state.end_time = time.time()
+                        st.success("Quiz terminé !")
+                          
                         
         # In the display_quiz function, update the final recap block to add the completed course if at least 50% correct.
         # Affichage du récapitulatif final si le quiz est terminé
@@ -332,7 +351,8 @@ def main():
                     st.write(f"Votre réponse : {answer['answer']}")
                     st.write(f"Bonne réponse : {correct_option}")
                     st.write(f"Correct : {'Oui' if answer['correct'] else 'Non'}")
-                    st.markdown(f"**Explication :** {q_data.get('explanation', 'Aucune explication disponible.')}")
+                    with st.expander("Explication", expanded=False):
+                        st.markdown(f"{q_data.get('explanation', 'Aucune explication disponible.')}")
                     if answer.get("hint_used", False):
                         st.info(f"**Indice utilisé :** {q_data.get('hint', 'Aucun indice disponible.')}")
             
@@ -345,6 +365,7 @@ def main():
             
             # Réinitialiser l'état pour permettre de refaire un quiz
             st.session_state.quiz_started = False
+            
                         
             
     def get_elapsed_time():
@@ -425,6 +446,7 @@ def main():
         # Appel de la fonction du quiz
         if st.button("Démarrer le quiz"):
             display_quiz(db_manager)
+        
        
 
     if not st.session_state.authenticated:
