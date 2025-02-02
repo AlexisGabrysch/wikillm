@@ -10,4 +10,10 @@ a la jeu geographique
 
 enseignant/ eleve outil ?
 
-est ce que le  llm peu gerer directement les 30 questions ?
+mode chill affichage question, affichage explication et next question
+
+
+///////////////////////////
+Ajouter du ML
+ajouter une base securité
+ajouter dans admin les metrics rag

@@ -1,15 +1,94 @@
-# src/database.py
+# FILE: src/quiz_database.py
 import sqlite3
-from typing import List, Dict, Any
+from datetime import datetime
+from typing import List, Dict, Any, Optional
 import hashlib
 
-class DatabaseManagerQuizz:
-    def __init__(self, db_path="src/db/user_quiz.db"):
-        self.conn = sqlite3.connect(db_path, check_same_thread=False)
+class CoursesDatabase:
+    def __init__(self, db_path: str = "src/db/courses.db") -> None:
+        self.db_path = db_path
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.create_tables()
 
-    def create_tables(self):
-        # Table utilisateurs
+    def create_tables(self) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS course_info (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                site TEXT,
+                matiere TEXT,
+                theme TEXT,
+                chapitre TEXT,
+                content TEXT,
+                link TEXT
+            )
+        """)
+        self.conn.commit()
+
+    def insert_course(self, site: str, matiere: str, theme: str, chapitre: str, content: str, link: str) -> None:
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO course_info (site, matiere, theme, chapitre, content, link)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (site, matiere, theme, chapitre, content, link))
+        self.conn.commit()
+
+    def get_matiere(self) -> List[str]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT DISTINCT matiere FROM course_info")
+        matieres = cursor.fetchall()
+        return [matiere[0] for matiere in matieres]
+    def get_themes_by_matiere(self, matiere: str) -> List[str]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT DISTINCT theme FROM course_info WHERE matiere = ?", (matiere,))
+        themes = cursor.fetchall()
+        return [theme[0] for theme in themes]
+    
+    def get_themes(self) -> List[str]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT DISTINCT theme FROM course_info")
+        themes = cursor.fetchall()
+        return [theme[0] for theme in themes]
+
+    def get_contents_per_theme(self, theme: str) -> str:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT content FROM course_info WHERE theme = ?", (theme,))
+        contents = cursor.fetchall()
+        return " ".join(content[0] for content in contents)
+
+    def get_contents_per_theme_as_dict(self, theme: str) -> Dict[str, str]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT chapitre, content FROM course_info WHERE theme = ?", (theme,))
+        rows = cursor.fetchall()
+        return {chapitre: content for chapitre, content in rows}
+
+    def get_courses_content_by_chapter(self,  chapitre: str) -> str:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT content FROM course_info WHERE chapitre = ?", (chapitre,))
+        contents = cursor.fetchall()
+        return " ".join(content[0] for content in contents)
+    
+    def get_all_chapters_by_theme(self, theme: str) -> List[str]:
+        cursor = self.conn.cursor()
+        cursor.execute("SELECT DISTINCT chapitre FROM course_info WHERE theme = ?", (theme,))
+        chapters = cursor.fetchall()
+        return [chapitre[0] for chapitre in chapters]
+    
+    def close(self) -> None:
+        self.conn.close()
+    
+
+class QuizDatabase:
+    def __init__(self, db_path: str = "src/db/quiz.db") -> None:
+        self.db_path = db_path
+        self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
+        self.create_tables()
+        self.insert_super_root()
+     
+
+    def create_tables(self) -> None:
+        cursor = self.conn.cursor()
+         # Table utilisateurs
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 user_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -21,11 +100,8 @@ class DatabaseManagerQuizz:
                 
             );
         """)
-
-
-
-        # Table questions avec 'subject' (matière)
-        self.conn.execute("""
+        # Updated questions table schema
+        cursor.execute("""
             CREATE TABLE IF NOT EXISTS questions (
                 question_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 question_text TEXT NOT NULL,
@@ -36,27 +112,25 @@ class DatabaseManagerQuizz:
                 correct_index INTEGER NOT NULL,
                 subject TEXT NOT NULL,
                 chapter TEXT NOT NULL,
-                hint TEXT ,
-                explanation TEXT       
-                
-            );
+                hint TEXT,
+                explanation TEXT
+            )
         """)
-        
-
-        # Table quizzes
+        # Table for quizzes (can be generated per subject/theme)
+     # Table quizzes
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS quizzes (
                 quiz_id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER,
+                subject TEXT NOT NULL,
+                chapter TEXT NOT NULL,
                 timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
                 speed_mode BOOLEAN NOT NULL,
                 FOREIGN KEY(user_id) REFERENCES users(user_id)
             );
         """)
-        
-
-
-        # Table answers
+      
+     # Table answers
         self.conn.execute("""
             CREATE TABLE IF NOT EXISTS answers (
                 answer_id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -70,7 +144,154 @@ class DatabaseManagerQuizz:
                 FOREIGN KEY(question_id) REFERENCES questions(question_id)
             );
         """)
+        
+                # Table completed_courses
+        self.conn.execute("""
+            CREATE TABLE IF NOT EXISTS completed_courses (
+                user_id INTEGER,
+                course_title TEXT,
+                PRIMARY KEY (user_id, course_title),
+                FOREIGN KEY(user_id) REFERENCES users(user_id)
+            );
+        """)
+        
+        # Assuming there exists a users table as described.
+        self.conn.commit()
+        
+    def insert_super_root(self):
+        cursor = self.conn.cursor()
+        # Check if 'root' user already exists
+        cursor.execute("SELECT user_id FROM users WHERE username = ?", ("rootuser",))
+        if cursor.fetchone() is None:
+            try:
+                cursor.execute("""
+                    INSERT INTO users (first_name, last_name, username, password_hash, super_user)
+                    VALUES (?, ?, ?, ?, ?)
+                """, ("admin", "admin", "rootuser", "rootpwd", 1))
+                self.conn.commit()
+            except sqlite3.IntegrityError:
+                pass  # handle error if needed
+        
+    def insert_question(
+        self,
+        question_text: str,
+        option1: str,
+        option2: str,
+        option3: str,
+        option4: str,
+        correct_index: int,
+        subject: str,
+        chapter: str,
+        hint: str = "",
+        explanation: str = ""
+    ) -> int:
+        """
+        Inserts a new question into the questions table.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO questions (
+                question_text, option1, option2, option3, option4,
+                correct_index, subject, chapter, hint, explanation
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """, (
+            question_text, option1, option2, option3, option4,
+            correct_index, subject, chapter, hint, explanation
+        ))
+        self.conn.commit()
+        return cursor.lastrowid
 
+    def get_questions_by_subject_and_chapter(self, subject: str, chapter: str) -> List[Dict[str, Any]]:
+        """
+        Returns all questions for the given subject and chapter.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT question_id, question_text, option1, option2, option3, option4, correct_index, hint, explanation
+            FROM questions
+            WHERE subject = ? AND chapter = ?
+        """, (subject, chapter))
+        rows = cursor.fetchall()
+        questions = []
+        for row in rows:
+            questions.append({
+                "question_id": row[0],
+                "question_text": row[1],
+                "option1": row[2],
+                "option2": row[3],
+                "option3": row[4],
+                "option4": row[5],
+                "correct_index": row[6],
+                "hint": row[7],
+                "explanation": row[8]
+            })
+        return questions
+
+    def create_quiz(self, user_id: int, subject: str, chapter: str, speed_mode: bool) -> int:
+        """
+        Creates a new quiz for the given user.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO quizzes (user_id, subject, chapter, speed_mode)
+            VALUES (?, ?, ?, ?)
+        """, (user_id, subject, chapter, speed_mode))
+        self.conn.commit()
+        return cursor.lastrowid
+
+    def insert_result(
+        self,
+        quiz_id: int,
+        question_id: int,
+        selected_option: int,
+        is_correct: bool,
+        answer_time: float,
+        indice: bool
+    ) -> None:
+        """
+        Inserts a new answer to a quiz.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            INSERT INTO answers (quiz_id, question_id, selected_option, is_correct, answer_time, indice)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (quiz_id, question_id, selected_option, is_correct, answer_time, indice))
+        self.conn.commit()
+
+    def get_user_results(self, user_id: int) -> List[Dict[str, Any]]:
+        """
+        Returns all quiz results for the given user.
+        """
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT quiz_id, subject, chapter, timestamp, speed_mode
+            FROM quizzes
+            WHERE user_id = ?
+        """, (user_id,))
+        rows = cursor.fetchall()
+        results = []
+        for row in rows:
+            quiz_id = row[0]
+            cursor.execute("""
+                SELECT question_id, selected_option, is_correct, answer_time, indice
+                FROM answers
+                WHERE quiz_id = ?
+            """, (quiz_id,))
+            answers = cursor.fetchall()
+            results.append({
+                "quiz_id": quiz_id,
+                "subject": row[1],
+                "chapter": row[2],
+                "timestamp": row[3],
+                "speed_mode": row[4],
+                "answers": answers
+            })
+        return results
+
+    def close(self) -> None:
+        self.conn.close()
+        
     def hash_password(self, password: str) -> str:
         """
         Encode un mot de passe en SHA-256.
@@ -82,7 +303,7 @@ class DatabaseManagerQuizz:
             str: Mot de passe encodé.
         """
         return hashlib.sha256(password.encode()).hexdigest()
-
+    
     def add_user(self, first_name: str, last_name: str, username: str, password: str, super_user: bool) -> bool:
         """
         Ajoute un nouvel utilisateur à la table 'users'.
@@ -126,50 +347,6 @@ class DatabaseManagerQuizz:
             SELECT * FROM users WHERE username = ? AND password_hash = ?;
         """, (username, password_hash))
         return cursor.fetchone() is not None
-
-    def add_quiz(self, user_id: int, speed_mode: bool) -> int:
-        """
-        Ajoute un nouveau quiz à la table 'quizzes' et retourne son ID.
-
-        Args:
-            user_id (int): ID de l'utilisateur.
-            speed_mode (bool): True si le mode rapide est activé, False sinon.
-
-        Returns:
-            int: ID du quiz ajouté.
-        """
-        cursor = self.conn.execute("""
-            INSERT INTO quizzes (user_id, speed_mode)
-            VALUES (?, ?);
-        """, (user_id, speed_mode))
-        self.conn.commit()
-        return cursor.lastrowid
-
-    def add_answer(self, quiz_id: int, question_id: int, selected_option: int, is_correct: bool, answer_time: float, indice: bool) -> None:
-        """
-        Ajoute une nouvelle réponse à la table 'answers'.
-
-        Args:
-            quiz_id (int): ID du quiz.
-            question_id (int): ID de la question.
-            selected_option (int): Index de l'option sélectionnée (1-4).
-            is_correct (bool): True si la réponse est correcte, False sinon.
-            answer_time (float) : Le temps passé pour répondre à la question
-            indice (bool) : Si un indice a été utilisé (1 pour utilisé sinon 0)
-
-
-        """
-        self.conn.execute("""
-            INSERT INTO answers (quiz_id, question_id, selected_option, is_correct, answer_time, indice)
-            VALUES (?, ?, ?, ?, ?, ?);
-        """, (quiz_id, question_id, selected_option, is_correct, answer_time, indice))
-        self.conn.commit()
-
-    def get_chapters_by_subject(self, subject: str) -> List[str]:
-        cursor = self.conn.execute("""
-            SELECT DISTINCT chapter FROM questions WHERE subject = ?;
-        """, (subject,))
-        return [row[0] for row in cursor.fetchall()]
     
     def get_average_answer_time(self, correct: bool = None) -> float:
             """
@@ -198,7 +375,7 @@ class DatabaseManagerQuizz:
             cursor = self.conn.execute(query)
             result = cursor.fetchone()[0]
             return round(result, 2) if result is not None else 0.0
-
+        
     def get_question_by_id(self, question_id: int) -> Dict[str, Any]:
         """
         Récupère une question à partir de son ID.
@@ -210,77 +387,26 @@ class DatabaseManagerQuizz:
             Dict[str, Any]: Dictionnaire contenant les détails de la question.
         """
         cursor = self.conn.execute("""
-            SELECT question_id, question_text, option1, option2, option3, option4, correct_index
+            SELECT question_text, option1, option2, option3, option4, correct_index, subject, chapter, hint, explanation
             FROM questions
             WHERE question_id = ?;
         """, (question_id,))
         row = cursor.fetchone()
-        if row:
-            return {
-                "question_id": row[0],
-                "question_text": row[1],
-                "options": [row[2], row[3], row[4], row[5]],
-                "correct_index": row[6]
-            }
-        return {}
-
-    def get_random_questions(self, num_questions: int, selected_topics: List[str]) -> List[Dict[str, Any]]:
-        """
-        Génère un certain nombre de questions aléatoires pour les sujets sélectionnés.
-
-        Args:
-            num_questions (int): Nombre de questions à générer.
-            selected_topics (List[str]): Liste des sujets sélectionnés.
-
-        Returns:
-            List[Dict[str, Any]]: Liste de dictionnaires contenant les détails des questions.
-
-        """
-
-        placeholders = ','.join('?' for _ in selected_topics)
-        query = f"""
-            SELECT question_id, question_text, option1, option2, option3, option4, correct_index
-            FROM questions
-            WHERE category IN ({placeholders})
-            ORDER BY RANDOM()
-            LIMIT ?;
-        """
-        cursor = self.conn.execute(query, (*selected_topics, num_questions))
-        rows = cursor.fetchall()
-        questions = []
-        for row in rows:
-            questions.append({
-                "question_id": row[0],
-                "question_text": row[1],
-                "options": [row[2], row[3], row[4], row[5]],
-                "correct_index": row[6]
-            })
-        return questions
-
-    def add_question(self, question_text: str, options: List[str], correct_index: int, subject: str, chapter: float) -> int:
-        """
-        Ajoute une nouvelle question à la table 'questions' et retourne son ID.
-
-        Args:
-            question_text (str): Le texte de la question.
-            options (List[str]): Liste des 4 options.
-            correct_index (int): L'index (1-4) de la réponse correcte.
-            subject (str) : La matière ('histoire', 'maths', etc)
-            chapter (str) : Le chapitre ('2nd guerre mondiale', 'BRICS', etc)
-
-        Returns:
-            int: L'ID de la question ajoutée.
-        """
-        if len(options) != 4:
-            raise ValueError("Il doit y avoir exactement 4 options.")
-
-        cursor = self.conn.execute("""
-            INSERT INTO questions (question_text, option1, option2, option3, option4, correct_index, subject, chapter)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?);
-        """, (question_text, options[0], options[1], options[2], options[3], correct_index, subject, chapter))
-        self.conn.commit()
-        return cursor.lastrowid
-
+        if row is None:
+            return {}
+        return {
+            "question_text": row[0],
+            "option1": row[1],
+            "option2": row[2],
+            "option3": row[3],
+            "option4": row[4],
+            "correct_index": row[5],
+            "subject": row[6],
+            "chapter": row[7],
+            "hint": row[8],
+            "explanation": row[9]
+        }
+        
     def get_global_success_rate(self) -> float:
         """
         Calcule le taux de réussite global.
@@ -296,18 +422,6 @@ class DatabaseManagerQuizz:
         """)
         row = cursor.fetchone()
         return round(row[0], 2) if row and row[0] is not None else 0.0
-
-    def get_subjects(self) -> List[str]:
-        """
-        Récupère la liste des matières disponibles à partir des questions.
-
-        Returns:
-            List[str]: Liste des sujets uniques.
-        """
-        cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
-        rows = cursor.fetchall()
-        topics = [row[0] for row in rows if row[0]]
-        return topics
 
     def change_password(self, username: str, old_password: str, new_password: str) -> bool:
         """
@@ -330,48 +444,32 @@ class DatabaseManagerQuizz:
         """, (password_hash, username))
         self.conn.commit()
         return True
-    
+
     def change_username(self, username: str, new_username: str) -> bool:
-        """
-        Change the username of a user ensuring the new username is unique.
+            """
+            Change the username of a user ensuring the new username is unique.
 
-        Args:
-            username (str): Current username.
-            new_username (str): New desired username.
+            Args:
+                username (str): Current username.
+                new_username (str): New desired username.
 
-        Returns:
-            bool: True if the username was changed successfully, False otherwise.
-        """
-        # Check if the new username already exists
-        cursor = self.conn.execute("""
-            SELECT 1 FROM users WHERE username = ?;
-        """, (new_username,))
-        if cursor.fetchone():
-            return False  # New username already taken
+            Returns:
+                bool: True if the username was changed successfully, False otherwise.
+            """
+            # Check if the new username already exists
+            cursor = self.conn.execute("""
+                SELECT 1 FROM users WHERE username = ?;
+            """, (new_username,))
+            if cursor.fetchone():
+                return False  # New username already taken
 
-        # Update the username
-        self.conn.execute("""
-            UPDATE users SET username = ? WHERE username = ?;
-        """, (new_username, username))
-        self.conn.commit()
-        return True
-
-    def get_super_user(self, username: str) -> bool:
-        """
-        Retrouve si un utilisateur est un super user.
-
-        Args:
-            username (str): Nom d'utilisateur.
-
-        Returns:
-            bool: True si l'utilisateur est un super user, False sinon.
-        """
-        cursor = self.conn.execute("""
-            SELECT super_user FROM users WHERE username = ?;
-        """, (username,))
-        result = cursor.fetchone()
-        return bool(result[0]) if result else False
-    
+            # Update the username
+            self.conn.execute("""
+                UPDATE users SET username = ? WHERE username = ?;
+            """, (new_username, username))
+            self.conn.commit()
+            return True
+        
     def get_average_success_rate_by_mode(self) -> List[Dict[str, Any]]:
         """
         Calcule le taux de réussite moyen pour chaque mode de quizz.
@@ -397,7 +495,7 @@ class DatabaseManagerQuizz:
                 "average_success_rate": round(row[1], 2) if row[1] is not None else 0.0
             } for row in cursor.fetchall()
         ]
-    
+
     def get_timestamp(self) -> str:
         """
         Retourne les timestamps de chaque quiz.
@@ -423,14 +521,13 @@ class DatabaseManagerQuizz:
         """
 
         cursor = self.conn.execute("""
-            SELECT COUNT(*)
-            FROM quizzes
+            SELECT quiz_id FROM quizzes
             JOIN users ON quizzes.user_id = users.user_id
             WHERE users.username = ?;
         """, (username,))
-        count = cursor.fetchone()[0]
-        return count
-
+        results = cursor.fetchall()
+        return len(results)
+    
     def get_taux_reussite_question(self, question_id: int) -> float:
         """
         Récupère le taux de réponses correctes pour une question donnée
@@ -767,7 +864,7 @@ class DatabaseManagerQuizz:
             } for row in cursor.fetchall()
         ]
 
-    
+ 
     def get_users_metrics(self) -> List[Dict[str, Any]]:
         """
         Récupère les métriques des utilisateurs.
@@ -859,4 +956,99 @@ class DatabaseManagerQuizz:
                 "avg_answer_time": round(row[3], 2) if row[3] is not None else 0.0
             } for row in cursor.fetchall()
         ]
- 
+
+    def add_completed_course(self, user_id: int, course_title: str) -> None:
+        """
+        Adds a completed course for a user.
+
+        Args:
+            user_id (int): The ID of the user.
+            course_title (str): The title of the completed course.
+        """
+        self.conn.execute("""
+            INSERT OR IGNORE INTO completed_courses (user_id, course_title)
+            VALUES (?, ?);
+        """, (user_id, course_title))
+        self.conn.commit()
+
+    def is_course_completed(self, user_id: int, course_title: str) -> bool:
+        """
+        Checks if a course is completed by a user.
+
+        Args:
+            user_id (int): The ID of the user.
+            course_title (str): The title of the course.
+
+        Returns:
+            bool: True if the course is completed, False otherwise.
+        """
+        cursor = self.conn.execute("""
+            SELECT 1 FROM completed_courses
+            WHERE user_id = ? AND course_title = ?;
+        """, (user_id, course_title))
+        return cursor.fetchone() is not None
+
+    def get_completed_courses(self, user_id: int) -> List[str]:
+        """
+        Retrieves the list of completed courses for a user.
+
+        Args:
+            user_id (int): The ID of the user.
+
+        Returns:
+            List[str]: A list of completed course titles.
+        """
+        cursor = self.conn.execute("""
+            SELECT course_title FROM completed_courses
+            WHERE user_id = ?;
+        """, (user_id,))
+        return [row[0] for row in cursor.fetchall()]
+    
+    def get_categories(self) -> List[str]:
+        """
+        Récupère les catégories des questions.
+
+        Returns:
+            List[str]: Liste des catégories.
+        """
+        cursor = self.conn.execute("SELECT DISTINCT subject FROM questions;")
+        return [row[0] for row in cursor.fetchall()]
+
+    def get_titles_by_category(self, category: str) -> List[str]:
+        """
+        Récupère les titres des questions pour une catégorie donnée.
+
+        Args:
+            category (str): La catégorie des questions.
+
+        Returns:
+            List[str]: Liste des titres.
+        """
+        cursor = self.conn.execute("""
+            SELECT DISTINCT chapter FROM questions WHERE subject = ?;
+        """, (category,))
+        return [row[0] for row in cursor.fetchall()]
+    def query_article(self) -> List[str]:
+        """
+        Récupère les articles des questions.
+
+        Returns:
+            List[str]: Liste des articles.
+        """
+        cursor = self.conn.execute("SELECT DISTINCT chapter FROM questions;")
+        return [row[0] for row in cursor.fetchall()]
+    
+    def get_super_user(self, username: str) -> bool:
+        """
+        Vérifie si un utilisateur est un super utilisateur.
+
+        Args:
+            username (str): Nom d'utilisateur.
+
+        Returns:
+            bool: True si l'utilisateur est un super utilisateur, False sinon.
+        """
+        cursor = self.conn.execute("""
+            SELECT super_user FROM users WHERE username = ?;
+        """, (username,))
+        return cursor.fetchone()[0] == 1

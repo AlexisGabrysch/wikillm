@@ -1,19 +1,35 @@
 import os
 from typing import Any, List, Dict
-import uuid
-import numpy as np
-from numpy.typing import NDArray
 from dotenv import load_dotenv, find_dotenv
-import litellm  # Change this line to import litellm directly
-from .utils import track_latency
-from .database import DatabaseManager
-import re
-import streamlit as st
-import asyncio
+import litellm  
+from .metrics_database import RAGMetricsDatabase
 
+import re
+import numpy as np
+from ecologits import EcoLogits
+from .db import utils as db_utils
+import time
+from functools import wraps
+# Charger les variables d'environnement
 load_dotenv(find_dotenv())
 print("Chargement des variables d'environnement...")
-print(os.getenv("MISTRAL_API_KEY"))
+
+if os.getenv("MISTRAL_API_KEY") is None:
+    raise ValueError("La clé d'API MISTRAL n'a pas été trouvée. Veuillez vérifier votre fichier .env.")
+else:
+    print("Clé d'API MISTRAL trouvée.")
+
+def track_latency(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        start_time = time.time()
+        result = func(self, *args, **kwargs)  # Pass self explicitly here.
+        end_time = time.time()
+        latency = end_time - start_time
+        self.latency = latency
+        return result
+    return wrapper
+
 
 class RAGPipeline:
     """Retrieval-Augmented Generation Pipeline for enhanced Q&A."""
@@ -22,183 +38,260 @@ class RAGPipeline:
     def __init__(
         self,
         generation_model: str,
-        role_prompt: str,
-        db_path: str,
-        max_tokens: int,
-        temperature: float,
+        max_tokens: int = 2000,
         top_n: int = 1,
-    ):
-        self.llm = generation_model
-        self.role_prompt = role_prompt
-        self.db_manager = DatabaseManager(db_path)
-        self.max_tokens = max_tokens
-        self.temperature = temperature
-        self.top_n = top_n
-
-    def add_document(self, title: str, content: str, links: List[str] = None, metadata: Dict[str, Any] = None) -> None:
-        """Adds a document to the database."""
-        self.db_manager.add_article(title, content, links, metadata)
+        temperature: float = 0.5
         
-    @st.cache_data(ttl=100)  # Cache pendant 10 minutes
-    def fetch_context_by_topic_cached(_self, topic: str) -> List[str]:
-        return _self.fetch_context_by_topic(topic)
+    ) -> None:
+        self.llm = generation_model
+        self.max_tokens = max_tokens
+        self.top_n = top_n
+        self.temperature = temperature
+        EcoLogits.init(providers="litellm", electricity_mix_zone="FRA")
+        self.metrics_db = RAGMetricsDatabase()
+        self.quizdb = db_utils.QuizDatabase()
+
+  
+
+
+    def _get_energy_usage(self, response : litellm.ModelResponse) -> tuple[float, float]:
+        energy_usage = getattr(response.impacts.energy.value, "min", response.impacts.energy.value)
+        gwp = getattr(response.impacts.gwp.value, "min", response.impacts.gwp.value)
+        return energy_usage, gwp
     
-    def fetch_context_by_topic(self, topic: str) -> List[str]:
-        """Retrieves the content of the article based on the topic."""
-        content = self.db_manager.query_article(topic)
-        if isinstance(content, str) and content != "Article non trouvé.":
-            return [content]
-        return []
+    def get_price_query(self, model: str, input_tokens: int, output_tokens: int) -> tuple[float, float]:
+       
+        pricing = {
+            "ministral-8b-latest": {"input": 0.095, "output": 0.095},
+            "mistral-large-latest": {"input": 1.92, "output": 5.75}}
+        cost_input = (input_tokens / 1_000_000) * pricing[model]["input"]
+        cost_output = (output_tokens / 1_000_000) * pricing[model]["output"]
+        return cost_input, cost_output
 
-    def get_cosim(self, a: NDArray[np.float32], b: NDArray[np.float32]) -> float:
+ 
+ 
+   
+    def build_prompt(self, context_course: List[str], topic: str, previous_questions: List[Dict[str, str]] = None, role: str = "assistant") -> List[Dict[str, str]]:
         """
-        Calculates the cosine similarity between two vectors.
-
+        Construit un prompt pour générer une nouvelle question à choix multiples sur un sujet donné.
+        Le prompt inclut des instructions pour varier la formulation et la difficulté des questions.
+        
         Args:
-            a (NDArray[np.float32]): The first vector.
-            b (NDArray[np.float32]): The second vector.
-
+            context_course (List[str]): Liste des éléments de contexte du cours.
+            topic (str): Le sujet pour lequel générer la question.
+            previous_questions (List[Dict[str, str]], optionnel): Liste de questions déjà posées pour éviter les répétitions.
+            role (str): Le rôle pour lequel construire le prompt. Par défaut "assistant".
+        
         Returns:
-            float: The cosine similarity between the two vectors.
+            List[Dict[str, str]]: Le prompt structuré au format (role, content).
+        
+        Raises:
+            ValueError: Si le rôle spécifié n'est pas "assistant".
         """
-        return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
-
-    def get_top_similarity(
-        self,
-        embedding_query: NDArray[np.float32],
-        embedding_chunks: NDArray[np.float32],
-        corpus: List[str],
-    ) -> List[str]:
-        """
-        Retrieves the top N most similar documents from the corpus based on the query's embedding.
-
-        Args:
-            embedding_query (NDArray[np.float32]): The embedding of the query.
-            embedding_chunks (NDArray[np.float32]): A NumPy array of embeddings for the documents in the corpus.
-            corpus (List[str]): A list of documents (strings) corresponding to the embeddings in `embedding_chunks`.
-
-        Returns:
-            List[str]: A list of the most similar documents from the corpus, ordered by similarity to the query.
-        """
-        cos_dist_list = np.array(
-            [
-                self.get_cosim(embedding_query, embed_doc)
-                for embed_doc in embedding_chunks
+        if role == "assistant":
+            
+            
+            # Construction de l'historique des questions déjà posées, le cas échéant
+            history_text = ""
+            if previous_questions:
+                history_text = "\nQuestions déjà posées:\n" + "\n".join(
+                    [f"{i+1}. {q['question']}" for i, q in enumerate(previous_questions)]
+                )
+            
+            # Assemblage du prompt complet avec une instruction pour varier la difficulté et la formulation
+            prompt = [
+                {"role": "system", "content": "Tu es un assistant pédagogique pour le programme de collège français."},
+                {"role": "assistant", "content": (
+                    f"Génère une nouvelle question à choix multiples sur le topic '{topic}' qui demande réflexion. "
+                    "Essaie de varier la difficulté et la formulation par rapport aux questions déjà posées. "
+                    "Si les questions précédentes étaient de difficulté standard, propose une question plus difficile "
+                    "en approfondissant certains aspects ou en abordant des angles moins évidents."
+                    "Tu ne dois pas répéter les questions déjà posées.\n\n"
+                    "Tu dois respecter le format suivant :\n"
+                    "--------------------------------------------------\n"
+                    "Question: [Votre question ici]\n"
+                    "1. [Première option]\n"
+                    "2. [Deuxième option]\n"
+                    "3. [Troisième option]\n"
+                    "4. [Quatrième option]\n"
+                    "Correct Answer: [Numéro de l'option correcte]\n"
+                    "Explanation: [Explication détaillée ici]\n"
+                    "Hint: [Indice utile ici]\n"
+                    "--------------------------------------------------\n\n"
+                    "Assure-toi que la question comporte exactement quatre options dont une seule est correcte, "
+                    "et qu'un indice est fourni sans révéler la réponse."
+                )},
+                {"role": "user", "content": f"Contexte du cours : {', '.join(context_course)}' Questions deja générées :' {history_text}"},
             ]
-        )
-        indices_of_max_values = np.argsort(cos_dist_list)[-self.top_n:][::-1]
-        return [corpus[i] for i in indices_of_max_values]
+            
+            return prompt
+        
+        if role == "summary":
+            prompt = [
+                {
+                    "role": "system",
+                    "content": (
+                        "Tu es un assistant pédagogique spécialisé dans le programme de collège français. "
+                        "Ton objectif est de proposer un résumé clair, concis et structuré sur un sujet donné, "
+                        "en veillant à expliquer les notions essentielles et à conclure de manière synthétique."
+                    )
+                },
+                {
+                    "role": "assistant",
+                    "content": (
+                        f"Génère un résumé clair et concis pour le chapitre ou sujet suivant : '{topic}'. "
+                        f"Le résumé doit être complet et reformulé en deux ou trois paragraphes, en utilisant une liste à puces si nécessaire. "
+                        "commencer par une brève introduction et se terminer par une conclusion concise."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": (
+                        f"Voici le contenu du cours : {', '.join(context_course)}. "
+                        "Réduis-le à l'essentiel tout en conservant la cohérence et la fin du texte."
+                    )
+                },
+            ]
+            return prompt
+        
+        raise ValueError(f"Le rôle '{role}' n'est pas pris en charge. Utilisez 'assistant' ou 'summary'.")
 
-    def build_prompt(
-        self, context: List[str], history: List[Dict[str, str]], query: str
-    ) -> List[Dict[str, str]]:
-        """
-        Builds a prompt string for a conversational agent based on the given context and query.
 
-        Args:
-            context (List[str]): The context information, typically extracted from books or other sources.
-            history (List[Dict[str, str]]): The conversation history.
-            query (str): The user's query or question.
 
-        Returns:
-            List[Dict[str, str]]: The RAG prompt in the OpenAI format
-        """
-        context_joined = "\n".join(context)
-        system_prompt = self.role_prompt
-        history_text = f"# Historique de conversation:\n" + "\n".join(
-            [f"{msg['role'].capitalize()} : {msg['content']}" for msg in history]
-        )
-        context_prompt = f"""Tu disposes de la section "Contexte" pour t'aider à répondre aux questions.
-# Contexte:
-{context_joined}
-"""
-        query_prompt = f"""# Question:
-{query}
-
-# Réponse:
-"""
-        return [
-            {"role": "system", "content": system_prompt},
-            {"role": "system", "content": history_text},
-            {"role": "system", "content": context_prompt},
-            {"role": "user", "content": query_prompt},
-        ]
 
     @track_latency
-    def generate_response(self, prompt: List[Dict[str, str]]) -> Dict[str, Any]:
+    def generate(self, prompt: List[Dict[str, str]]) -> litellm.ModelResponse:
         """
-        Generates a response using the Mistral LLM via litellm.
-
-        Args:
-            prompt (List[Dict[str, str]]): The prompt messages to send to the model.
-
-        Returns:
-            Dict[str, Any]: The response from the model.
+        Sends the prompt to the language model using default provider and model from self.
         """
-        try:
-            modified_prompt = prompt + [{
-                "role": "system",
-                "content": """Format your response as follows:
-    Question: [Your question here]
-    1. [First option]
-    2. [Second option]
-    3. [Third option]
-    4. [Fourth option]
-    Correct Answer: [Number of correct option]
-    Explanation: [Detailed explanation here]"""
-            }]
-            
-            response = litellm.completion(
-                model=f"mistral/{self.llm}",
-                messages=modified_prompt,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
+        response = litellm.completion(
+            model=f"mistral/{self.llm}",
+            messages=prompt,
+            max_tokens=self.max_tokens,
+            temperature=self.temperature,
+        )
+        return response
+
+    def metrics(self, response: litellm.ModelResponse) -> dict:
+        energy_usage, gwp = self._get_energy_usage(response)
+        # Use prompt_tokens and completion_tokens instead of non-existent input_tokens/output_tokens
+        price_input, price_output = self.get_price_query(
+            self.llm,
+            response.usage.prompt_tokens,
+            response.usage.completion_tokens
+        )
+        txt = response.choices[0].message.content
+        latency = getattr(self, "latency", 0)
+        
+        return {
+            "response": txt,
+            "prompt_tokens": response.usage.prompt_tokens,
+            "completion_tokens": response.usage.completion_tokens,
+            "energy_usage": energy_usage,
+            "gwp": gwp,
+            "price_input": price_input,
+            "price_output": price_output,
+            "latency": latency
+        }
+
+
+    def fetch_context(self, topic: str) -> List[str]:
+        """
+        Fetches the context from the database based on the topic.
+        """
+        context = db_utils.get_contents_per_theme_as_dict(db_path='src/db/courses.db', theme=topic)
+        return context
+    
+    
+    
+    def generate_summary(self,chapitre : str,  txt: str) -> str:
+        prompt = self.build_prompt( context_course=[txt], topic=chapitre, role="summary")
+        response = self.generate(prompt)
+        metrics = self.metrics(response)
+        print(metrics)
+        self.metrics_db.insert_metric(
+            input_tokens=metrics["prompt_tokens"],
+            output_tokens=metrics["completion_tokens"],
+            price_input=metrics["price_input"],
+            price_output=metrics["price_output"],
+            latency=metrics["latency"],
+            gwp=metrics["gwp"],
+            energy_usage=metrics["energy_usage"]
+        )
+        return response.choices[0].message.content
+        
+
+
+    def generate_quizz_questions(self, topic: str, nbr_questions: int = 5) -> List[Dict[str, Any]]:
+        context_course_dict = self.fetch_context(topic)
+        
+        if not context_course_dict:
+            raise ValueError(f"Aucun contexte trouvé pour le topic '{topic}'.")
+
+        generated_questions = []
+        for i in range(nbr_questions):
+            print(f"Generating question {i}...")
+            idx = np.random.randint(0, len(context_course_dict))
+            context_course = list(context_course_dict.keys())[idx]
+
+            prompt = self.build_prompt(
+                context_course=[context_course],  # Expecting a List[str]
+                topic=topic, 
+                previous_questions=generated_questions, 
+                role="assistant"
             )
+            response = self.generate(prompt=prompt)
+            metrics = self.metrics(response)
+            print(metrics)
+            self.metrics_db.insert_metric(
+                input_tokens=metrics["prompt_tokens"],
+                output_tokens=metrics["completion_tokens"],
+                price_input=metrics["price_input"],
+                price_output=metrics["price_output"],
+                latency=metrics["latency"],
+                gwp=metrics["gwp"],
+                energy_usage=metrics["energy_usage"]
+            )
+            # Parse la question générée
+            new_question = self.parse_questions(response.choices[0].message.content)
+            # Si le parse retourne plusieurs questions, prendre la première
+            if new_question and isinstance(new_question, list):
+                generated_questions.append(new_question[0])
+            else:
+                # En cas d'erreur de format, on ajoute une question d'erreur pour éviter la répétition
+                generated_questions.append({
+                    "question": "Erreur de format lors de la génération de la question.",
+                    "options": [],
+                    "correct_index": -1,
+                    "explanation": "",
+                    "hint": ""
+                })
+        return generated_questions
             
-            # Extract content from response
-            content = response.choices[0].message.content
-            
-            # Format response
-            formatted_response = {
-                "choices": [{
-                    "message": {
-                        "content": content
-                    }
-                }],
-                "usage": response.usage if hasattr(response, 'usage') else None
-            }
-            
-            return formatted_response
-            
-        except Exception as e:
-            print(f"Erreur lors de l'appel à litellm : {e}")
-            return {
-                "choices": [
-                    {
-                        "message": {
-                            "content": """Question: Erreur de génération
-    1. Option A
-    2. Option B
-    3. Option C
-    4. Option D
-    Correct Answer: 1
-    Explanation: Une erreur s'est produite lors de la génération de la question."""
-                        }
-                    }
-                ]
-            }
-
-    def parse_quiz_response(self,content: str) -> dict:
+       
+    
+    def parse_questions(self,content: str) -> list:
         """
-        Parses the LLM response to extract question, options, correct answer, and explanation.
-
+        Parse le contenu généré par le modèle et extrait une liste de questions formatées.
+        
+        Chaque question doit suivre le format :
+            Question: [Votre question ici]
+            1. [Première option]
+            2. [Deuxième option]
+            3. [Troisième option]
+            4. [Quatrième option]
+            Correct Answer: [Numéro de l'option correcte]
+            Explanation: [Explication détaillée ici]
+            Hint: [Indice utile ici]
+            
         Args:
-            content (str): The raw response content from the LLM.
-
+            content (str): Le texte contenant une ou plusieurs questions.
+            
         Returns:
-            dict: Containing 'question', 'options', 'correct_index', and 'explanation'.
+            list: Une liste de dictionnaires avec les clés "question", "options",
+                "correct_index", "explanation" et "hint".
+                Si aucun format n'est détecté, une liste contenant un message d'erreur est retournée.
         """
-        print(content)
         pattern = re.compile(
             r"Question:\s*(.*?)\s*\r?\n+"
             r"1\.\s*(.*?)\s*\r?\n+"
@@ -206,111 +299,142 @@ class RAGPipeline:
             r"3\.\s*(.*?)\s*\r?\n+"
             r"4\.\s*(.*?)\s*\r?\n+"
             r"Correct Answer:\s*(\d+)\s*\r?\n+"
-            r"Explanation:\s*(.*)", re.DOTALL | re.IGNORECASE
+            r"Explanation:\s*(.*?)\s*\r?\n+"
+            r"Hint:\s*(.*?)(?:\r?\n|$)",
+            re.DOTALL | re.IGNORECASE
         )
-        match = pattern.match(content.strip())
-        if not match:
-            return {
+        
+        questions = []
+        for match in pattern.finditer(content.strip()):
+            question_text, opt1, opt2, opt3, opt4, correct_str, explanation, hint = match.groups()
+            correct_index = int(correct_str) - 1  # Passage en index 0-based
+            questions.append({
+                "question": question_text.strip(),
+                "options": [opt1.strip(), opt2.strip(), opt3.strip(), opt4.strip()],
+                "correct_index": correct_index,
+                "explanation": explanation.strip(),
+                "hint": hint.strip()
+            })
+        
+        if not questions:
+            # Si aucun match n'est trouvé, retourner un message d'erreur
+            return [{
                 "question": "Format incorrect ou information incomplète.",
                 "options": [],
                 "correct_index": -1,
-                "explanation": ""
-            }
-
-        question, opt1, opt2, opt3, opt4, correct_str, explanation = match.groups()
-        correct_index = int(correct_str) - 1  # 0-based index
-
-        return {
-            "question": question.strip(),
-            "options": [opt1.strip(), opt2.strip(), opt3.strip(), opt4.strip()],
-            "correct_index": correct_index,
-            "explanation": explanation.strip()
-        }
+                "explanation": "",
+                "hint": ""
+            }]
         
-    @track_latency
-    def generate_hint(self, question: str, context: List[str]) -> str:
+        return questions
+
+    def save_questions(self, questions: List[Dict[str, Any]], subject: str, chapter: str) -> None:
         """
-        Génère un indice pour la question donnée sans révéler la réponse.
-        """
-        try:
-            prompt = [
-                {"role": "system", "content": self.role_prompt},
-                {"role": "system", "content": "\n".join(context)},
-                {
-                    "role": "user",
-                    "content": f"Fournis un indice utile pour la question suivante sans révéler la réponse : {question}"
-                },
-            ]
-
-            response = litellm.completion(
-                model=f"mistral/{self.llm}",
-                messages=prompt,
-                max_tokens=50,  # Ajustez selon vos besoins
-                temperature=self.temperature,
-            )
-
-            hint = response.choices[0].message.content.strip()
-            return hint
-
-        except Exception as e:
-            print(f"Erreur lors de la génération de l'indice : {e}")
-            return "Désolé, un indice n'est pas disponible pour le moment."
-    def generate_quiz_question(self, topic: str) -> Dict[str, Any]:
-        """
-        Generates a quiz question with four options based on the given topic.
-
+        Enregistre les questions générées dans la base de données.
+        
         Args:
-            topic (str): The topic for which to generate the quiz question.
-
-        Returns:
-            Dict[str, Any]: A dictionary containing the question, options, and the index of the correct answer.
+            questions (List[Dict[str, Any]]): Une liste de dictionnaires contenant les questions à enregistrer.
         """
-        context = self.fetch_context_by_topic(topic)
-        if not context:
-            return {"question": "Aucune information trouvée sur ce sujet.", "options": [], "correct_index": -1}
-
-        # Construire le prompt pour générer une question à choix multiples
-        query = f"Créer une question à choix multiples sur le sujet suivant : {topic} avec quatre options, dont une seule est correcte."
-        prompt = self.build_prompt(context=context, history=[], query=query)
-        response = self.generate_response(prompt=prompt)
-        response_content = response.get("choices", [{}])[0].get("message", {}).get("content", "")
-        quiz_data = self.parse_quiz_response(response_content)
-        return quiz_data
+        for question in questions:
+                # Récupère les options, et complète avec "N/A" si moins de 4 options sont disponibles.
+                options = question.get("options", [])
+                while len(options) < 4:
+                    options.append("N/A")
+                
+                self.quizdb.insert_question(
+                    question_text=question["question"],
+                    option1=options[0],
+                    option2=options[1],
+                    option3=options[2],
+                    option4=options[3],
+                    correct_index=question.get("correct_index", -1),
+                    subject=subject,
+                    chapter=chapter,
+                    hint=question.get("hint", ""),
+                    explanation=question.get("explanation", "")
+                )
+        print(f'Questions {chapter}  enregistrées dans la base de données.')
+            
     
     
-    async def generate_quiz_question_async(self, topic: str) -> Dict[str, Any]:
-        loop = asyncio.get_event_loop()
-        return await loop.run_in_executor(None, self.generate_quiz_question, topic)
+
+if __name__ == "__main__":
+    pipeline = RAGPipeline(
+        generation_model="mistral-large-latest",
+        max_tokens=1500,
+        temperature=0.8,
+        top_n=1
+    )
+    # # quizz = pipeline.generate_quizz_questions("L'Europe, un théâtre majeur des guerres totales (1914-1945)", nbr_questions=10)
+    # # quizz = pipeline.generate_quizz_questions("Le monde depuis 1945", nbr_questions=10)
+    # quizz = pipeline.generate_quizz_questions("Françaises et Français dans une République repensée", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Histoire", chapter="Françaises et Français dans une République repensée")
     
+    # quizz = pipeline.generate_quizz_questions("Le monde depuis 1945", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Histoire", chapter="Le monde depuis 1945")
     
-    def __call__(self, query: str, history: List[Dict[str, str]]) -> str:
-        """
-        Handles the RAG pipeline for a given query.
+    # quizz = pipeline.generate_quizz_questions("L'Europe, un théâtre majeur des guerres totales (1914-1945)", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Histoire", chapter="L'Europe, un théâtre majeur des guerres totales (1914-1945)")
+    
+    # quizz = pipeline.generate_quizz_questions("La planète Terre, l'environnement et l'action humaine", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="La planète Terre, l'environnement et l'action humaine")
+    
+    # quizz = pipeline.generate_quizz_questions("Le climat et la météorologie", nbr_questions=7)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="Le climat et la météorologie")
 
-        Args:
-            query (str): The user query to be processed.
-            history (List[Dict[str, str]]): A list of dictionaries containing the conversation history.
+    # quizz = pipeline.generate_quizz_questions("L'exploitation des ressources naturelles", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="L'exploitation des ressources naturelles")  
+    
+    # quizz = pipeline.generate_quizz_questions("Écosystèmes et activités humaines", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="Écosystèmes et activités humaines")  
+    
+    # quizz = pipeline.generate_quizz_questions("Nutrition et organisation des animaux", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="Nutrition et organisation des animaux")  
+    
+    # quizz = pipeline.generate_quizz_questions("Reproduction sexuée et asexuée : dynamique des populations", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="Reproduction sexuée et asexuée : dynamique des populations")  
+    
+    # quizz = pipeline.generate_quizz_questions("La parenté des êtres vivants", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="SVT", chapter="La parenté des êtres vivants")  
+    
+#     quizz = pipeline.generate_quizz_questions("Diversité et stabilité génétique des êtres vivants", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="SVT", chapter="Diversité et stabilité génétique des êtres vivants")  
+    
+#     quizz = pipeline.generate_quizz_questions("Le fonctionnement de l'organisme", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="SVT", chapter="Le fonctionnement de l'organisme")  
+    
+#     quizz = pipeline.generate_quizz_questions("Système nerveux et comportement responsable", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="SVT", chapter="Système nerveux et comportement responsable")  
 
-        Returns:
-            str: The generated response from the model.
-        """
-        chunks = self.db_manager.query_articles(query_texts=[query], n_results=self.top_n)
-        print("Chunks retrieved!")
-        if not chunks or not chunks.get("documents"):
-            return "Aucun document pertinent trouvé dans la base de données."
+#     quizz = pipeline.generate_quizz_questions("Alimentation et digestion", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="SVT", chapter="Alimentation et digestion")  
 
-        chunks_list: List[str] = chunks["documents"][0]
-        print("Building prompt...")
-        prompt_rag = self.build_prompt(
-            context=chunks_list, history=history, query=query
-        )
-        response = self.generate_response(prompt=prompt_rag)
-        # Stocker la requête dans la base de données si nécessaire
-        # self.db_manager.add_query(query=response)
-        ai_response = response.get("choices", [{}])[0].get("message", {}).get("content", "Je n'ai pas compris votre demande.")
-        return ai_response
+#     quizz = pipeline.generate_quizz_questions("Le monde microbien et la santé", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="SVT", chapter="Le monde microbien et la santé")  
+    
+#     quizz = pipeline.generate_quizz_questions("Reproduction et comportements sexuels responsables", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="SVT", chapter="Reproduction et comportements sexuels responsables")     
+# ###
+#     quizz = pipeline.generate_quizz_questions("Les états de la matière", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="Physique-chimie", chapter="Les états de la matière")     
+ 
+#     quizz = pipeline.generate_quizz_questions("Les transformations chimiques", nbr_questions=10)
+#     pipeline.save_questions(quizz, subject="Physique-chimie", chapter="Les transformations chimiques")  
+    
+    # quizz = pipeline.generate_quizz_questions("L'organisation de la matière dans l'Univers", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Physique-chimie", chapter="L'organisation de la matière dans l'Univers")  
 
-    def print_db_stats(self):
-        """Prints the database statistics."""
-        stats = self.db_manager.get_stats()
-        print("Statistiques de la base de données:", stats)
+    # quizz = pipeline.generate_quizz_questions("Mouvements et interactions", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Physique-chimie", chapter="Mouvements et interactions")  
+ 
+    # quizz = pipeline.generate_quizz_questions("L'énergie", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Physique-chimie", chapter="L'énergie")  
+    
+    # quizz = pipeline.generate_quizz_questions("Les circuits électriques", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Physique-chimie", chapter="Les circuits électriques")  
+    
+    # quizz = pipeline.generate_quizz_questions("Les signaux", nbr_questions=10)
+    # pipeline.save_questions(quizz, subject="Physique-chimie", chapter="Les signaux")    
+ 
+    
+    print("Génération de questions terminée.")

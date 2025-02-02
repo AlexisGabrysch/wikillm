@@ -2,12 +2,12 @@
 
 import streamlit as st
 from pages.ressources.components import Navbar
-from src.databasebis import DatabaseManagerbis
+from src.db.utils import QuizDatabase , CoursesDatabase
 import os
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
-
+from src.metrics_database import RAGMetricsDatabase
 def main():
     Navbar()
 
@@ -16,11 +16,8 @@ def main():
         st.warning("You must be logged in to access the admin dashboard.")
         return
 
-    # Initialiser le gestionnaire de base de données
-    base_dir = os.path.dirname(os.path.abspath(__file__))
-    db_path = os.path.join(base_dir, "..", "user_quiz.db")
-    db = DatabaseManagerbis(db_path=db_path)
-
+    db = QuizDatabase()
+    rag_metrics_db = RAGMetricsDatabase()
     username = st.session_state.get('username')
     super_user = db.get_super_user(username)
 
@@ -28,7 +25,15 @@ def main():
     if super_user == 1:
 
         st.header("Super User Dashboard")
-                
+        # affichage des métriques
+        st.subheader("Metrics Overview")
+        metrics = rag_metrics_db.get_all_metrics()
+        if metrics:
+            df_metrics = pd.DataFrame(metrics)
+            st.dataframe(df_metrics)
+        else:
+            st.warning("No metrics available at the moment.")
+            
         # Metrique 
         st.subheader("Vue globale des métriques")
         total_users = db.get_total_users()
@@ -408,7 +413,16 @@ def main():
     # Si pas super_user alors afficher l'interface de l'utilisateur normal
     else : 
         st.title(f"Tableau de bords de {username}")
-        
+        st.header("Super User Dashboard")
+        # affichage des métriques
+        st.subheader("Metrics Overview")
+        metrics = rag_metrics_db.get_all_metrics()
+        print(metrics)
+        if metrics:
+            df_metrics = pd.DataFrame(metrics)
+            st.dataframe(df_metrics)
+        else:
+            st.warning("No metrics available at the moment.")
         users = db.conn.execute(
             "SELECT username FROM users WHERE username = ?;",
             (username,)).fetchall()
