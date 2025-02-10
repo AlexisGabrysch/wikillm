@@ -1,8 +1,8 @@
 import streamlit as st
 import os
-from pages.ressources.components import Navbar , display_quiz 
-from src.db.utils import QuizDatabase ,CoursesDatabase
-from src.rag import RAGPipeline
+from app.pages.ressources.components import Navbar , display_quiz 
+from app.src.db.utils import QuizDatabase ,CoursesDatabase
+from app.src.rag import RAGPipeline
 from dotenv import find_dotenv, load_dotenv
 st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 
