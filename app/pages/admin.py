@@ -1,8 +1,8 @@
 # pages/admin.py
 
 import streamlit as st
-from pages.ressources.components import Navbar
-from src.db.utils import QuizDatabase, CoursesDatabase
+from app.pages.ressources.components import Navbar
+from app.src.db.utils import QuizDatabase, CoursesDatabase
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd

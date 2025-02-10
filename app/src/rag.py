@@ -2,8 +2,8 @@ import os
 from typing import Any, List, Dict
 from dotenv import load_dotenv, find_dotenv
 import litellm  
-from src.metrics_database import RAGMetricsDatabase
-from src.ml_model import generate_recommendations, get_thresholds
+from app.src.metrics_database import RAGMetricsDatabase
+from app.src.ml_model import generate_recommendations, get_thresholds
 
 
 import re

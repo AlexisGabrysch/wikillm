@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import wikipedia
-from db.utils import create_db_courses, insert_course
+from app.src.db.utils import create_db_courses, insert_course
 
 class SearchEngine:
     def __init__(self):

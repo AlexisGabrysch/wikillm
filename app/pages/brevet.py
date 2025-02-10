@@ -1,7 +1,7 @@
 import streamlit as st
-from pages.ressources.components import Navbar , display_brevet_blanc
-from src.rag import RAGPipeline
-from src.db.utils import QuizDatabase
+from app.pages.ressources.components import Navbar , display_brevet_blanc
+from app.src.rag import RAGPipeline
+from app.src.db.utils import QuizDatabase
 
 
 rag = RAGPipeline(
