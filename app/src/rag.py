@@ -2,14 +2,14 @@ import os
 from typing import Any, List, Dict
 from dotenv import load_dotenv, find_dotenv
 import litellm  
-from app.src.metrics_database import RAGMetricsDatabase
-from app.src.ml_model import generate_recommendations, get_thresholds
+from src.metrics_database import RAGMetricsDatabase
+from src.ml_model import generate_recommendations, get_thresholds
 
 
 import re
 import numpy as np
 from ecologits import EcoLogits
-from app.src.db import utils as db_utils
+from src.db import utils as db_utils
 import time
 from functools import wraps
 # Charger les variables d'environnement
@@ -202,7 +202,7 @@ class RAGPipeline:
         """
         Fetches the context from the database based on the topic.
         """
-        context = db_utils.get_contents_per_theme_as_dict(db_path='app/src/db/courses.db', theme=topic)
+        context = db_utils.get_contents_per_theme_as_dict(db_path='src/db/courses.db', theme=topic)
         return context
     
     

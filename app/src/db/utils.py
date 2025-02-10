@@ -5,7 +5,7 @@ from typing import List, Dict, Any, Optional
 import hashlib
 
 class CoursesDatabase:
-    def __init__(self, db_path: str = "app/src/db/courses.db") -> None:
+    def __init__(self, db_path: str = "src/db/courses.db") -> None:
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.create_tables()
@@ -79,7 +79,7 @@ class CoursesDatabase:
     
 
 class QuizDatabase:
-    def __init__(self, db_path: str = "app/src/db/quiz.db") -> None:
+    def __init__(self, db_path: str = "src/db/quiz.db") -> None:
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.create_tables()

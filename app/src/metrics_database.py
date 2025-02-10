@@ -4,7 +4,7 @@ from typing import List, Dict, Any
 from datetime import datetime
 
 class RAGMetricsDatabase:
-    def __init__(self, db_path: str = "app/src/db/rag_metrics.db") -> None:
+    def __init__(self, db_path: str = "src/db/rag_metrics.db") -> None:
         self.db_path = db_path
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.create_table()

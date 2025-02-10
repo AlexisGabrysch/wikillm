@@ -1,0 +1,16 @@
+streamlit
+requests
+bs4
+ecologits
+wikipedia
+litellm==1.55.12
+matplotlib==3.9.2
+numpy==1.26.4
+pandas
+plotly
+python-dotenv==1.0.1
+scikit-learn==1.5.2
+sentence-transformers
+streamlit_autorefresh
+rapidfuzz
+

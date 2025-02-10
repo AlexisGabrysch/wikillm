@@ -1,20 +1,9 @@
 import streamlit as st
-import os
 
-# print the current working directory
-print(os.getcwd())
-import os
-import sys
-# print the current working directory
-print(os.getcwd())
-sys.path.append(os.path.abspath(os.path.dirname(__file__)))  # Add current dir
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # Add parent dir
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))  # Add parent dir
-
-from app.src.metrics_database import RAGMetricsDatabase
+from src.metrics_database import RAGMetricsDatabase
 import time
 from streamlit_autorefresh import st_autorefresh
-from app.src.db.utils import QuizDatabase
+from src.db.utils import QuizDatabase
 
 # Function to handle user logout
 def logout():
@@ -585,8 +574,8 @@ def Navbar():
         
         st.markdown("## Navigation")
         st.page_link('app.py', label='Accueil', icon='🏠')
-        st.page_link('app/pages/admin.py', label='Admin', icon='🔒')
-        st.page_link('app/pages/brevet.py', label='Brevet Blanc', icon='🎓')
+        st.page_link('pages/admin.py', label='Admin', icon='🔒')
+        st.page_link('pages/brevet.py', label='Brevet Blanc', icon='🎓')
         st.markdown("---")
         
         cols = st.columns(2)

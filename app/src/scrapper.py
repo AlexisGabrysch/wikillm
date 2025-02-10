@@ -1,7 +1,7 @@
 import requests
 from bs4 import BeautifulSoup
 import wikipedia
-from app.src.db.utils import create_db_courses, insert_course
+from db.utils import create_db_courses, insert_course
 
 class SearchEngine:
     def __init__(self):
@@ -68,7 +68,7 @@ class SchoolMoveScrapper(SearchEngine):
         return courses_list
 
 
-    def run(self, url, db_path="app/src/db/courses.db", theme="Histoire"):
+    def run(self, url, db_path="src/db/courses.db", theme="Histoire"):
         courses = self.get_courses_from_html(url)
         create_db_courses(db_path)
         for course in courses:
@@ -122,4 +122,4 @@ class WikipediaScrapper:
 
 if __name__ == "__main__":
     scrap = SchoolMoveScrapper()
-    scrap.run("https://www.schoolmouv.fr/3eme/physique-chimie" , db_path="app/src/db/courses.db", theme="Physique-chimie")
+    scrap.run("https://www.schoolmouv.fr/3eme/physique-chimie" , db_path="src/db/courses.db", theme="Physique-chimie")
