@@ -1,7 +1,7 @@
 import streamlit as st
-from pages.ressources.components import Navbar , display_quiz 
-from src.db.utils import QuizDatabase ,CoursesDatabase
-from src.rag import RAGPipeline
+from .pages.ressources.components import Navbar , display_quiz 
+from .src.db.utils import QuizDatabase ,CoursesDatabase
+from .src.rag import RAGPipeline
 from dotenv import find_dotenv, load_dotenv
 import os
 import time
