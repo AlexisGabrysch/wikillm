@@ -1,8 +1,10 @@
 import streamlit as st
 import os
-
+import sys
 # print the current working directory
 print(os.getcwd())
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))  # Add current dir
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # Add parent dir
 
 from pages.ressources.components import Navbar , display_quiz 
 from src.db.utils import QuizDatabase ,CoursesDatabase
