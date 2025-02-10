@@ -574,8 +574,8 @@ def Navbar():
         
         st.markdown("## Navigation")
         st.page_link('app.py', label='Accueil', icon='🏠')
-        st.page_link('pages/admin.py', label='Admin', icon='🔒')
-        st.page_link('pages/brevet.py', label='Brevet Blanc', icon='🎓')
+        st.page_link('app/pages/admin.py', label='Admin', icon='🔒')
+        st.page_link('app/pages/brevet.py', label='Brevet Blanc', icon='🎓')
         st.markdown("---")
         
         cols = st.columns(2)
