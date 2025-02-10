@@ -1,10 +1,13 @@
 import streamlit as st
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+
 from pages.ressources.components import Navbar , display_quiz 
 from src.db.utils import QuizDatabase ,CoursesDatabase
 from src.rag import RAGPipeline
 from dotenv import find_dotenv, load_dotenv
-import os
-import time
 from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 
