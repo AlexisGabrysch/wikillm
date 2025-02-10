@@ -1,4 +1,15 @@
 import streamlit as st
+import os
+
+# print the current working directory
+print(os.getcwd())
+import os
+import sys
+# print the current working directory
+print(os.getcwd())
+sys.path.append(os.path.abspath(os.path.dirname(__file__)))  # Add current dir
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))  # Add parent dir
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))  # Add parent dir
 
 from app.src.metrics_database import RAGMetricsDatabase
 import time
