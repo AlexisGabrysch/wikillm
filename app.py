@@ -8,7 +8,6 @@ from pages.ressources.components import Navbar , display_quiz
 from src.db.utils import QuizDatabase ,CoursesDatabase
 from src.rag import RAGPipeline
 from dotenv import find_dotenv, load_dotenv
-from streamlit_autorefresh import st_autorefresh
 st.set_page_config(page_title="WikiLLM", page_icon="📚", layout="wide")
 
 def main():
@@ -219,13 +218,15 @@ def main():
                 top_n=1,
             )
             
-            for chapter in chapters:
-                with st.expander(f"📚 {chapter}", expanded=False):
-                    # Récupération du texte du chapitre depuis la base de données
-                    course_text = db_courses.get_courses_content_by_chapter(chapter)
-                    # Récupère (et met en cache) le résumé généré pour ce chapitre
-                    summary = get_chapter_summary(rag_chap, chapter, course_text)
-                    st.markdown(summary)
+            with st.spinner('Chargement des chapitres...'):
+                for chapter in chapters:
+                    with st.expander(f"📚 {chapter}", expanded=False):
+                        with st.spinner('Chargement du contenu du cours...'):
+                            # Récupération du texte du chapitre depuis la base de données
+                            course_text = db_courses.get_courses_content_by_chapter(chapter)
+                            # Récupère (et met en cache) le résumé généré pour ce chapitre
+                            summary = get_chapter_summary(rag_chap, chapter, course_text)
+                            st.markdown(summary)
         else:
             st.warning("Impossible de charger le contenu du cours.")
         # Appel de la fonction du quiz
