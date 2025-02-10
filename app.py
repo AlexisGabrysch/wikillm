@@ -2,7 +2,8 @@ import streamlit as st
 import os
 import sys
 
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+# print the current working directory
+print(os.getcwd())
 
 from pages.ressources.components import Navbar , display_quiz 
 from src.db.utils import QuizDatabase ,CoursesDatabase
