@@ -1,6 +1,5 @@
 import streamlit as st
 import os
-import sys
 
 # print the current working directory
 print(os.getcwd())
