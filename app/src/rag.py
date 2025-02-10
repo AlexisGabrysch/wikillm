@@ -202,7 +202,7 @@ class RAGPipeline:
         """
         Fetches the context from the database based on the topic.
         """
-        context = db_utils.get_contents_per_theme_as_dict(db_path='src/db/courses.db', theme=topic)
+        context = db_utils.get_contents_per_theme_as_dict(db_path='app/src/db/courses.db', theme=topic)
         return context
     
     
