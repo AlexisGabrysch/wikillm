@@ -1,12 +1,13 @@
 import streamlit as st
-from src.metrics_database import RAGMetricsDatabase
-import time
-from streamlit_autorefresh import st_autorefresh
-from src.db.utils import QuizDatabase
 import os
 import sys
 
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), os.path.pardir)))
+
+from src.metrics_database import RAGMetricsDatabase
+import time
+from streamlit_autorefresh import st_autorefresh
+from src.db.utils import QuizDatabase
 
 # Function to handle user logout
 def logout():
