@@ -1,5 +1,5 @@
 import streamlit as st
-
+import os
 from pages.ressources.components import Navbar , display_quiz 
 from src.db.utils import QuizDatabase ,CoursesDatabase
 from src.rag import RAGPipeline
