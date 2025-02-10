@@ -9,7 +9,7 @@ from app.src.ml_model import generate_recommendations, get_thresholds
 import re
 import numpy as np
 from ecologits import EcoLogits
-from src.db import utils as db_utils
+from app.src.db import utils as db_utils
 import time
 from functools import wraps
 # Charger les variables d'environnement
