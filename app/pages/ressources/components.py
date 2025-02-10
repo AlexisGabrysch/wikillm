@@ -1,9 +1,9 @@
 import streamlit as st
 
-from src.metrics_database import RAGMetricsDatabase
+from app.src.metrics_database import RAGMetricsDatabase
 import time
 from streamlit_autorefresh import st_autorefresh
-from src.db.utils import QuizDatabase
+from app.src.db.utils import QuizDatabase
 
 # Function to handle user logout
 def logout():
